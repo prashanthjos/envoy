@@ -282,8 +282,7 @@ TEST(StatsFilterEmitTest, ParseCountersGaugesAndHistograms) {
   auto ff = proxy_wasm::getForeignFunction("stats_filter_emit");
   ASSERT_TRUE(ff != nullptr);
 
-  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "",
-                                 std::unordered_map<std::string, std::string>{}, {});
+  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "", {}, {});
   auto result = ff(wasm_base, arguments, [](size_t) -> void* { return nullptr; });
   EXPECT_EQ(result, proxy_wasm::WasmResult::Ok);
 
@@ -308,8 +307,7 @@ TEST(StatsFilterEmitTest, HistogramBlockIsOptional) {
   auto ff = proxy_wasm::getForeignFunction("stats_filter_emit");
   ASSERT_TRUE(ff != nullptr);
 
-  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "",
-                                 std::unordered_map<std::string, std::string>{}, {});
+  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "", {}, {});
   auto result = ff(wasm_base, arguments, [](size_t) -> void* { return nullptr; });
   EXPECT_EQ(result, proxy_wasm::WasmResult::Ok);
 
@@ -328,8 +326,7 @@ TEST(StatsFilterEmitTest, NoActiveContext) {
   auto ff = proxy_wasm::getForeignFunction("stats_filter_emit");
   ASSERT_TRUE(ff != nullptr);
 
-  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "",
-                                 std::unordered_map<std::string, std::string>{}, {});
+  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "", {}, {});
   auto result = ff(wasm_base, arguments, [](size_t) -> void* { return nullptr; });
   EXPECT_EQ(result, proxy_wasm::WasmResult::InternalFailure);
 }
@@ -341,8 +338,7 @@ TEST(StatsFilterEmitTest, EmptyArguments) {
   auto ff = proxy_wasm::getForeignFunction("stats_filter_emit");
   ASSERT_TRUE(ff != nullptr);
 
-  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "",
-                                 std::unordered_map<std::string, std::string>{}, {});
+  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "", {}, {});
   auto result = ff(wasm_base, "", [](size_t) -> void* { return nullptr; });
   EXPECT_EQ(result, proxy_wasm::WasmResult::BadArgument);
 
@@ -373,8 +369,7 @@ TEST(StatsFilterGlobalTagsTest, SetGlobalTags) {
   auto ff = proxy_wasm::getForeignFunction("stats_filter_set_global_tags");
   ASSERT_TRUE(ff != nullptr);
 
-  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "",
-                                 std::unordered_map<std::string, std::string>{}, {});
+  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "", {}, {});
   auto result = ff(wasm_base, wire, [](size_t) -> void* { return nullptr; });
   EXPECT_EQ(result, proxy_wasm::WasmResult::Ok);
 
@@ -408,8 +403,7 @@ TEST(StatsFilterNameOverridesTest, SetNameOverrides) {
   auto ff = proxy_wasm::getForeignFunction("stats_filter_set_name_overrides");
   ASSERT_TRUE(ff != nullptr);
 
-  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "",
-                                 std::unordered_map<std::string, std::string>{}, {});
+  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "", {}, {});
   auto result = ff(wasm_base, wire, [](size_t) -> void* { return nullptr; });
   EXPECT_EQ(result, proxy_wasm::WasmResult::Ok);
 
@@ -456,8 +450,7 @@ TEST(StatsFilterInjectMetricsTest, InjectCounterAndGauge) {
   auto ff = proxy_wasm::getForeignFunction("stats_filter_inject_metrics");
   ASSERT_TRUE(ff != nullptr);
 
-  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "",
-                                 std::unordered_map<std::string, std::string>{}, {});
+  proxy_wasm::WasmBase wasm_base(nullptr, "", "", "", {}, {});
   auto result = ff(wasm_base, wire, [](size_t) -> void* { return nullptr; });
   EXPECT_EQ(result, proxy_wasm::WasmResult::Ok);
 

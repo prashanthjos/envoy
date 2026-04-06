@@ -166,12 +166,12 @@ std::vector<HistogramInfo> StatsFilterRootContext::fetchHistograms() const {
   std::vector<HistogramInfo> histograms;
   size_t offset = 0;
   uint32_t count = 0;
-  memcpy(&count, result + offset, sizeof(uint32_t));
+  memcpy(&count, result + offset, sizeof(uint32_t)); // NOLINT(safe-memcpy)
   offset += sizeof(uint32_t);
 
   for (uint32_t i = 0; i < count && offset < result_size; ++i) {
     uint32_t name_len = 0;
-    memcpy(&name_len, result + offset, sizeof(uint32_t));
+    memcpy(&name_len, result + offset, sizeof(uint32_t)); // NOLINT(safe-memcpy)
     offset += sizeof(uint32_t);
     histograms.push_back({std::string(result + offset, name_len)});
     offset += name_len;
