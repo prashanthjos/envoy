@@ -1153,6 +1153,7 @@ proxy_wasm_cpp_host:
   - envoy.filters.http.wasm
   - envoy.filters.network.wasm
   - envoy.stat_sinks.wasm
+  - envoy.stat_sinks.wasm_filter
   - envoy.wasm.runtime.null
   - envoy.wasm.runtime.v8
   - envoy.wasm.runtime.wamr
