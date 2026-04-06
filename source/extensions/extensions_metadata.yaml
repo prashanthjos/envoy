@@ -1475,6 +1475,13 @@ envoy.stat_sinks.wasm:
   status: alpha
   type_urls:
   - envoy.extensions.stat_sinks.wasm.v3.Wasm
+envoy.stat_sinks.wasm_filter:
+  categories:
+  - envoy.stats_sinks
+  security_posture: data_plane_agnostic
+  status: alpha
+  type_urls:
+  - envoy.extensions.stat_sinks.wasm_filter.v3.WasmFilterStatsSinkConfig
 envoy.string_matcher.lua:
   categories:
   - envoy.string_matcher
