@@ -81,8 +81,7 @@ bool readTagVector(const char* data, size_t total, size_t& offset, Stats::TagVec
   tags.reserve(tag_count);
   for (uint32_t t = 0; t < tag_count; ++t) {
     Stats::Tag tag;
-    if (!readStr(data, total, offset, tag.name_) ||
-        !readStr(data, total, offset, tag.value_)) {
+    if (!readStr(data, total, offset, tag.name_) || !readStr(data, total, offset, tag.value_)) {
       return false;
     }
     tags.push_back(std::move(tag));
@@ -215,8 +214,7 @@ RegisterForeignFunction registerStatsFilterSetNameOverrides(
       ctx->name_overrides.reserve(count);
       for (uint32_t i = 0; i < count; ++i) {
         NameOverride ovr;
-        if (!readU32(data, total, offset, ovr.type) ||
-            !readU32(data, total, offset, ovr.index)) {
+        if (!readU32(data, total, offset, ovr.type) || !readU32(data, total, offset, ovr.index)) {
           return WasmResult::BadArgument;
         }
         if (!readStr(data, total, offset, ovr.new_name)) {
@@ -391,15 +389,10 @@ RegisterForeignFunction registerStatsFilterGetAllMetricTags(
         return all;
       };
 
-      auto counter_tags = collectTags(counters, [](const auto& c) {
-        return c.counter_.get().tags();
-      });
-      auto gauge_tags = collectTags(gauges, [](const auto& g) {
-        return g.get().tags();
-      });
-      auto histogram_tags = collectTags(histograms, [](const auto& h) {
-        return h.get().tags();
-      });
+      auto counter_tags =
+          collectTags(counters, [](const auto& c) { return c.counter_.get().tags(); });
+      auto gauge_tags = collectTags(gauges, [](const auto& g) { return g.get().tags(); });
+      auto histogram_tags = collectTags(histograms, [](const auto& h) { return h.get().tags(); });
 
       auto blockSize = [](const std::vector<Stats::TagVector>& tag_groups) -> size_t {
         size_t sz = kU32;
@@ -528,10 +521,9 @@ EnrichedMetricSnapshot::EnrichedMetricSnapshot(Stats::MetricSnapshot& original,
     histogram_wrappers_.reserve(src_histograms.size());
     enriched_histograms_.reserve(src_histograms.size());
     for (uint32_t i = 0; i < src_histograms.size(); ++i) {
-      histogram_wrappers_.emplace_back(src_histograms[i].get(), global_tags,
-                                       i < histogram_name_overrides_.size()
-                                           ? histogram_name_overrides_[i]
-                                           : std::string());
+      histogram_wrappers_.emplace_back(
+          src_histograms[i].get(), global_tags,
+          i < histogram_name_overrides_.size() ? histogram_name_overrides_[i] : std::string());
       enriched_histograms_.emplace_back(histogram_wrappers_.back());
     }
   } else {
@@ -674,8 +666,7 @@ void WasmFilterStatsSink::flush(Stats::MetricSnapshot& snapshot) {
                               !context_.kept_gauge_indices.empty() ||
                               !context_.kept_histogram_indices.empty();
   bool has_enrichments = !global_tags_.empty() || !context_.name_overrides.empty() ||
-                         !context_.synthetic_counters.empty() ||
-                         !context_.synthetic_gauges.empty();
+                         !context_.synthetic_counters.empty() || !context_.synthetic_gauges.empty();
 
   if (!has_filter_decisions && !has_enrichments) {
     inner_sink_->flush(snapshot);

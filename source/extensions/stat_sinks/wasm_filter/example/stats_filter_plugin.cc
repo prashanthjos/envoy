@@ -19,6 +19,7 @@
 
 #ifndef NULL_PLUGIN
 #include "proxy_wasm_intrinsics.h"
+
 #include "source/extensions/common/wasm/ext/envoy_proxy_wasm_api.h"
 #else
 #include "source/extensions/common/wasm/ext/envoy_null_plugin.h"
@@ -95,7 +96,8 @@ void StatsFilterRootContext::setGlobalTagsFromNodeMetadata() {
   size_t result_size = 0;
   proxy_call_foreign_function("stats_filter_set_global_tags", wire.data(), wire.size(), &result,
                               &result_size);
-  logInfo("StatsFilterPlugin: set " + std::to_string(tags.size()) + " global tags from node metadata");
+  logInfo("StatsFilterPlugin: set " + std::to_string(tags.size()) +
+          " global tags from node metadata");
 }
 
 bool StatsFilterRootContext::onConfigure(size_t config_size) {
@@ -254,8 +256,8 @@ void StatsFilterRootContext::onStatsUpdate(uint32_t result_size) {
     // 1 synthetic counter: wasm_filter.metrics_emitted = total kept metrics count
     appendU32(1);
     appendStr("wasm_filter.metrics_emitted");
-    uint64_t total = kept_counter_indices.size() + kept_gauge_indices.size() +
-                     kept_histogram_indices.size();
+    uint64_t total =
+        kept_counter_indices.size() + kept_gauge_indices.size() + kept_histogram_indices.size();
     appendU64(total);
     appendU32(0); // no per-metric tags
 
@@ -285,8 +287,7 @@ void StatsFilterRootContext::onStatsUpdate(uint32_t result_size) {
 
     char* emit_result = nullptr;
     size_t emit_result_size = 0;
-    proxy_call_foreign_function("stats_filter_emit",
-                                reinterpret_cast<const char*>(wire.data()),
+    proxy_call_foreign_function("stats_filter_emit", reinterpret_cast<const char*>(wire.data()),
                                 wire.size() * sizeof(uint32_t), &emit_result, &emit_result_size);
   }
 }

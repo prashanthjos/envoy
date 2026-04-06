@@ -13,8 +13,7 @@ namespace StatSinks {
 namespace WasmFilter {
 
 // Merges original tags with extra tags. Extra tags are appended.
-inline Stats::TagVector mergeTags(const Stats::TagVector& original,
-                                  const Stats::TagVector& extra) {
+inline Stats::TagVector mergeTags(const Stats::TagVector& original, const Stats::TagVector& extra) {
   if (extra.empty()) {
     return original;
   }
@@ -42,9 +41,7 @@ public:
   std::string tagExtractedName() const override {
     return name_override_.empty() ? original_.tagExtractedName() : name_override_;
   }
-  Stats::StatName tagExtractedStatName() const override {
-    return original_.tagExtractedStatName();
-  }
+  Stats::StatName tagExtractedStatName() const override { return original_.tagExtractedStatName(); }
   void iterateTagStatNames(const Stats::Metric::TagStatNameIterFn& fn) const override {
     original_.iterateTagStatNames(fn);
   }
@@ -91,9 +88,7 @@ public:
   std::string tagExtractedName() const override {
     return name_override_.empty() ? original_.tagExtractedName() : name_override_;
   }
-  Stats::StatName tagExtractedStatName() const override {
-    return original_.tagExtractedStatName();
-  }
+  Stats::StatName tagExtractedStatName() const override { return original_.tagExtractedStatName(); }
   void iterateTagStatNames(const Stats::Metric::TagStatNameIterFn& fn) const override {
     original_.iterateTagStatNames(fn);
   }
@@ -142,9 +137,7 @@ public:
   std::string tagExtractedName() const override {
     return name_override_.empty() ? original_.tagExtractedName() : name_override_;
   }
-  Stats::StatName tagExtractedStatName() const override {
-    return original_.tagExtractedStatName();
-  }
+  Stats::StatName tagExtractedStatName() const override { return original_.tagExtractedStatName(); }
   void iterateTagStatNames(const Stats::Metric::TagStatNameIterFn& fn) const override {
     original_.iterateTagStatNames(fn);
   }

@@ -277,8 +277,7 @@ TEST(StatsFilterEmitTest, ParseCountersGaugesAndHistograms) {
   setActiveContext(&ctx);
 
   std::vector<uint32_t> wire = {2, 0, 2, 1, 1, 1, 0};
-  std::string arguments(reinterpret_cast<const char*>(wire.data()),
-                        wire.size() * sizeof(uint32_t));
+  std::string arguments(reinterpret_cast<const char*>(wire.data()), wire.size() * sizeof(uint32_t));
 
   auto ff = proxy_wasm::getForeignFunction("stats_filter_emit");
   ASSERT_TRUE(ff != nullptr);
@@ -304,8 +303,7 @@ TEST(StatsFilterEmitTest, HistogramBlockIsOptional) {
   setActiveContext(&ctx);
 
   std::vector<uint32_t> wire = {1, 0, 0};
-  std::string arguments(reinterpret_cast<const char*>(wire.data()),
-                        wire.size() * sizeof(uint32_t));
+  std::string arguments(reinterpret_cast<const char*>(wire.data()), wire.size() * sizeof(uint32_t));
 
   auto ff = proxy_wasm::getForeignFunction("stats_filter_emit");
   ASSERT_TRUE(ff != nullptr);
@@ -325,8 +323,7 @@ TEST(StatsFilterEmitTest, NoActiveContext) {
   setActiveContext(nullptr);
 
   std::vector<uint32_t> wire = {0, 0};
-  std::string arguments(reinterpret_cast<const char*>(wire.data()),
-                        wire.size() * sizeof(uint32_t));
+  std::string arguments(reinterpret_cast<const char*>(wire.data()), wire.size() * sizeof(uint32_t));
 
   auto ff = proxy_wasm::getForeignFunction("stats_filter_emit");
   ASSERT_TRUE(ff != nullptr);

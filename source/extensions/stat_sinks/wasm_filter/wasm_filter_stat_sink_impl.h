@@ -85,8 +85,7 @@ void setGlobalTags(Stats::TagVector* tags);
 //   - Synthetic counter/gauge injection
 class EnrichedMetricSnapshot : public Stats::MetricSnapshot {
 public:
-  EnrichedMetricSnapshot(Stats::MetricSnapshot& original,
-                         const StatsFilterContext& ctx,
+  EnrichedMetricSnapshot(Stats::MetricSnapshot& original, const StatsFilterContext& ctx,
                          const Stats::TagVector& global_tags);
 
   const std::vector<CounterSnapshot>& counters() override { return enriched_counters_; }
