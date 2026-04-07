@@ -468,6 +468,89 @@ void setActiveContext(StatsFilterContext* ctx) { active_context = ctx; }
 Stats::TagVector* getGlobalTags() { return active_global_tags; }
 void setGlobalTags(Stats::TagVector* tags) { active_global_tags = tags; }
 
+void buildBufferToSnapshotMaps(Stats::MetricSnapshot& snapshot, StatsFilterContext& ctx) {
+  const auto& counters = snapshot.counters();
+  ctx.counter_buffer_to_snapshot.reserve(counters.size());
+  for (uint32_t i = 0; i < counters.size(); ++i) {
+    if (counters[i].counter_.get().used()) {
+      ctx.counter_buffer_to_snapshot.push_back(i);
+    }
+  }
+
+  const auto& gauges = snapshot.gauges();
+  ctx.gauge_buffer_to_snapshot.reserve(gauges.size());
+  for (uint32_t i = 0; i < gauges.size(); ++i) {
+    if (gauges[i].get().used()) {
+      ctx.gauge_buffer_to_snapshot.push_back(i);
+    }
+  }
+}
+
+void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilterContext& context,
+                                    Stats::TagVector& global_tags, Stats::Sink& inner_sink) {
+  auto translateIndices = [](absl::flat_hash_set<uint32_t>& indices,
+                             const std::vector<uint32_t>& mapping) {
+    absl::flat_hash_set<uint32_t> translated;
+    translated.reserve(indices.size());
+    for (uint32_t buf_idx : indices) {
+      if (buf_idx < mapping.size()) {
+        translated.insert(mapping[buf_idx]);
+      }
+    }
+    indices = std::move(translated);
+  };
+
+  translateIndices(context.kept_counter_indices, context.counter_buffer_to_snapshot);
+  translateIndices(context.kept_gauge_indices, context.gauge_buffer_to_snapshot);
+
+  for (auto& ovr : context.name_overrides) {
+    if (ovr.type == 1 && ovr.index < context.counter_buffer_to_snapshot.size()) {
+      ovr.index = context.counter_buffer_to_snapshot[ovr.index];
+    } else if (ovr.type == 2 && ovr.index < context.gauge_buffer_to_snapshot.size()) {
+      ovr.index = context.gauge_buffer_to_snapshot[ovr.index];
+    }
+  }
+
+  const auto& counters = snapshot.counters();
+  const auto& gauges = snapshot.gauges();
+
+  bool has_filter_decisions = !context.kept_counter_indices.empty() ||
+                              !context.kept_gauge_indices.empty() ||
+                              !context.kept_histogram_indices.empty();
+  bool has_enrichments = !global_tags.empty() || !context.name_overrides.empty() ||
+                         !context.synthetic_counters.empty() || !context.synthetic_gauges.empty();
+
+  if (!has_filter_decisions && !has_enrichments) {
+    inner_sink.flush(snapshot);
+    return;
+  }
+
+  if (!has_filter_decisions && has_enrichments) {
+    for (uint32_t i = 0; i < counters.size(); ++i) {
+      context.kept_counter_indices.insert(i);
+    }
+    for (uint32_t i = 0; i < gauges.size(); ++i) {
+      context.kept_gauge_indices.insert(i);
+    }
+  }
+
+  if (has_filter_decisions) {
+    for (uint32_t i = 0; i < counters.size(); ++i) {
+      if (!counters[i].counter_.get().used()) {
+        context.kept_counter_indices.insert(i);
+      }
+    }
+    for (uint32_t i = 0; i < gauges.size(); ++i) {
+      if (!gauges[i].get().used()) {
+        context.kept_gauge_indices.insert(i);
+      }
+    }
+  }
+
+  EnrichedMetricSnapshot enriched(snapshot, context, global_tags);
+  inner_sink.flush(enriched);
+}
+
 // ---------------------------------------------------------------------------
 // EnrichedMetricSnapshot
 // ---------------------------------------------------------------------------
@@ -604,25 +687,7 @@ void WasmFilterStatsSink::flush(Stats::MetricSnapshot& snapshot) {
     return;
   }
 
-  // Build buffer-order → snapshot-order index maps. The onStatsUpdate binary
-  // buffer only serializes used() metrics, so the WASM plugin's indices are
-  // sequential within that subset. We need to translate them to full snapshot
-  // array positions for EnrichedMetricSnapshot.
-  const auto& counters = snapshot.counters();
-  context_.counter_buffer_to_snapshot.reserve(counters.size());
-  for (uint32_t i = 0; i < counters.size(); ++i) {
-    if (counters[i].counter_.get().used()) {
-      context_.counter_buffer_to_snapshot.push_back(i);
-    }
-  }
-
-  const auto& gauges = snapshot.gauges();
-  context_.gauge_buffer_to_snapshot.reserve(gauges.size());
-  for (uint32_t i = 0; i < gauges.size(); ++i) {
-    if (gauges[i].get().used()) {
-      context_.gauge_buffer_to_snapshot.push_back(i);
-    }
-  }
+  buildBufferToSnapshotMaps(snapshot, context_);
 
   setActiveContext(&context_);
   setGlobalTags(&global_tags_);
@@ -632,75 +697,7 @@ void WasmFilterStatsSink::flush(Stats::MetricSnapshot& snapshot) {
   setActiveContext(nullptr);
   setGlobalTags(nullptr);
 
-  // Translate buffer-order indices to snapshot-order indices.
-  auto translateIndices = [](absl::flat_hash_set<uint32_t>& indices,
-                             const std::vector<uint32_t>& mapping) {
-    absl::flat_hash_set<uint32_t> translated;
-    translated.reserve(indices.size());
-    for (uint32_t buf_idx : indices) {
-      if (buf_idx < mapping.size()) {
-        translated.insert(mapping[buf_idx]);
-      }
-    }
-    indices = std::move(translated);
-  };
-
-  translateIndices(context_.kept_counter_indices, context_.counter_buffer_to_snapshot);
-  translateIndices(context_.kept_gauge_indices, context_.gauge_buffer_to_snapshot);
-  // Histograms are not filtered by used() in the serialization path, so their
-  // indices from stats_filter_get_histograms already match snapshot order.
-
-  // Translate name override indices too.
-  for (auto& ovr : context_.name_overrides) {
-    if (ovr.type == 1 && ovr.index < context_.counter_buffer_to_snapshot.size()) {
-      ovr.index = context_.counter_buffer_to_snapshot[ovr.index];
-    } else if (ovr.type == 2 && ovr.index < context_.gauge_buffer_to_snapshot.size()) {
-      ovr.index = context_.gauge_buffer_to_snapshot[ovr.index];
-    }
-    // Histogram indices don't need translation.
-  }
-
-  // If the plugin didn't call stats_filter_emit, pass everything through
-  // (but still apply global tags if any were set).
-  bool has_filter_decisions = !context_.kept_counter_indices.empty() ||
-                              !context_.kept_gauge_indices.empty() ||
-                              !context_.kept_histogram_indices.empty();
-  bool has_enrichments = !global_tags_.empty() || !context_.name_overrides.empty() ||
-                         !context_.synthetic_counters.empty() || !context_.synthetic_gauges.empty();
-
-  if (!has_filter_decisions && !has_enrichments) {
-    inner_sink_->flush(snapshot);
-    return;
-  }
-
-  // If plugin set global tags but didn't call emit, keep everything.
-  if (!has_filter_decisions && has_enrichments) {
-    for (uint32_t i = 0; i < counters.size(); ++i) {
-      context_.kept_counter_indices.insert(i);
-    }
-    for (uint32_t i = 0; i < gauges.size(); ++i) {
-      context_.kept_gauge_indices.insert(i);
-    }
-  }
-
-  // The WASM plugin can only see used() metrics in the onStatsUpdate buffer.
-  // Unused metrics are invisible to the plugin, so they should pass through
-  // automatically — the plugin can only filter what it can see.
-  if (has_filter_decisions) {
-    for (uint32_t i = 0; i < counters.size(); ++i) {
-      if (!counters[i].counter_.get().used()) {
-        context_.kept_counter_indices.insert(i);
-      }
-    }
-    for (uint32_t i = 0; i < gauges.size(); ++i) {
-      if (!gauges[i].get().used()) {
-        context_.kept_gauge_indices.insert(i);
-      }
-    }
-  }
-
-  EnrichedMetricSnapshot enriched(snapshot, context_, global_tags_);
-  inner_sink_->flush(enriched);
+  processFilterDecisionsAndFlush(snapshot, context_, global_tags_, *inner_sink_);
 }
 
 } // namespace WasmFilter

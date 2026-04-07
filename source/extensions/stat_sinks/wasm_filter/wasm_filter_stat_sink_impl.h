@@ -78,6 +78,15 @@ void setActiveContext(StatsFilterContext* ctx);
 Stats::TagVector* getGlobalTags();
 void setGlobalTags(Stats::TagVector* tags);
 
+// Builds the buffer-order → snapshot-order index maps needed for translating
+// WASM plugin indices (which skip unused metrics) to snapshot array positions.
+void buildBufferToSnapshotMaps(Stats::MetricSnapshot& snapshot, StatsFilterContext& ctx);
+
+// Translates WASM filter decisions from buffer-order indices to snapshot-order
+// indices, applies enrichment, and flushes to the inner sink.
+void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilterContext& context,
+                                    Stats::TagVector& global_tags, Stats::Sink& inner_sink);
+
 // Wraps an existing MetricSnapshot, applying:
 //   - Filtering by kept indices
 //   - Global tag injection on all metrics
