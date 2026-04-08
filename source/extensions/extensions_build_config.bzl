@@ -306,8 +306,6 @@ EXTENSIONS = {
     "envoy.stat_sinks.open_telemetry":                  "//source/extensions/stat_sinks/open_telemetry:config",
     "envoy.stat_sinks.statsd":                          "//source/extensions/stat_sinks/statsd:config",
     "envoy.stat_sinks.wasm":                            "//source/extensions/stat_sinks/wasm:config",
-    "envoy.stat_sinks.wasm_filter":                     "//source/extensions/stat_sinks/wasm_filter:config",
-
     #
     # Thrift filters
     #

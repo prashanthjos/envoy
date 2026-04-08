@@ -7,7 +7,7 @@
 #include "envoy/stats/sink.h"
 
 #include "source/extensions/common/wasm/wasm.h"
-#include "source/extensions/stat_sinks/wasm_filter/enriched_metric.h"
+#include "contrib/stat_sinks/wasm_filter/source/enriched_metric.h"
 
 #include "absl/container/flat_hash_set.h"
 

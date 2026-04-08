@@ -1,4 +1,4 @@
-#include "source/extensions/stat_sinks/wasm_filter/wasm_filter_stat_sink_impl.h"
+#include "contrib/stat_sinks/wasm_filter/source/wasm_filter_stat_sink_impl.h"
 
 #include "test/mocks/stats/mocks.h"
 

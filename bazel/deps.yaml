@@ -238,7 +238,6 @@ flatbuffers:
   - envoy.filters.network.wasm
   - envoy.http.ext_proc.processing_request_modifiers.mapped_attribute_builder
   - envoy.stat_sinks.wasm
-  - envoy.stat_sinks.wasm_filter
   - envoy.rbac.matchers.upstream_ip_port
   - envoy.matching.inputs.cel_data_input
   - envoy.matching.matchers.cel_matcher
@@ -577,7 +576,6 @@ cel_cpp:
   - envoy.filters.network.wasm
   - envoy.http.ext_proc.processing_request_modifiers.mapped_attribute_builder
   - envoy.stat_sinks.wasm
-  - envoy.stat_sinks.wasm_filter
   - envoy.formatter.cel
   - envoy.matching.inputs.cel_data_input
   - envoy.matching.matchers.cel_matcher
@@ -606,7 +604,6 @@ cel_spec:
   - envoy.filters.network.wasm
   - envoy.http.ext_proc.processing_request_modifiers.mapped_attribute_builder
   - envoy.stat_sinks.wasm
-  - envoy.stat_sinks.wasm_filter
   - envoy.formatter.cel
   - envoy.matching.inputs.cel_data_input
   - envoy.matching.matchers.cel_matcher
@@ -1156,7 +1153,6 @@ proxy_wasm_cpp_host:
   - envoy.filters.http.wasm
   - envoy.filters.network.wasm
   - envoy.stat_sinks.wasm
-  - envoy.stat_sinks.wasm_filter
   - envoy.wasm.runtime.null
   - envoy.wasm.runtime.v8
   - envoy.wasm.runtime.wamr
@@ -1177,7 +1173,6 @@ proxy_wasm_cpp_sdk:
   - envoy.filters.http.wasm
   - envoy.filters.network.wasm
   - envoy.stat_sinks.wasm
-  - envoy.stat_sinks.wasm_filter
   - envoy.wasm.runtime.null
   - envoy.wasm.runtime.v8
   - envoy.wasm.runtime.wamr

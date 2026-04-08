@@ -73,7 +73,6 @@ directories:
   source/extensions/rate_limit_descriptors/expr: 96.1
   source/extensions/stat_sinks/graphite_statsd: 82.8  # Death tests don't report LCOV
   source/extensions/stat_sinks/statsd: 85.2  # Death tests don't report LCOV
-  source/extensions/stat_sinks/wasm_filter: 88.0  # WasmFilterStatsSink::flush() and config factory require WASM runtime
   source/extensions/tracers/zipkin: 95.6
   source/extensions/transport_sockets/proxy_protocol: 96.2
   source/extensions/transport_sockets/tls/cert_mappers/filter_state_override: 96.2

@@ -1,14 +1,14 @@
-#include "source/extensions/stat_sinks/wasm_filter/config.h"
+#include "contrib/stat_sinks/wasm_filter/source/config.h"
 
 #include <memory>
 
-#include "envoy/extensions/stat_sinks/wasm_filter/v3/wasm_filter.pb.validate.h"
+#include "contrib/envoy/extensions/stat_sinks/wasm_filter/v3/wasm_filter.pb.validate.h"
 #include "envoy/registry/registry.h"
 #include "envoy/server/factory_context.h"
 
 #include "source/common/config/utility.h"
 #include "source/extensions/common/wasm/wasm.h"
-#include "source/extensions/stat_sinks/wasm_filter/wasm_filter_stat_sink_impl.h"
+#include "contrib/stat_sinks/wasm_filter/source/wasm_filter_stat_sink_impl.h"
 
 namespace Envoy {
 namespace Extensions {

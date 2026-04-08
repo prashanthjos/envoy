@@ -1,13 +1,13 @@
 load(
     "//bazel:envoy_build_system.bzl",
-    "envoy_cc_extension",
+    "envoy_cc_contrib_extension",
     "envoy_cc_library",
-    "envoy_extension_package",
+    "envoy_contrib_package",
 )
 
 licenses(["notice"])  # Apache 2
 
-envoy_extension_package()
+envoy_contrib_package()
 
 envoy_cc_library(
     name = "wasm_filter_stat_sink_lib",
@@ -24,8 +24,8 @@ envoy_cc_library(
     alwayslink = 1,
 )
 
-envoy_cc_extension(
-    name = "config",
+envoy_cc_contrib_extension(
+    name = "config_lib",
     srcs = ["config.cc"],
     hdrs = ["config.h"],
     deps = [
@@ -36,7 +36,6 @@ envoy_cc_extension(
         "//source/extensions/common/wasm:remote_async_datasource_lib",
         "//source/extensions/common/wasm:wasm_lib",
         "//source/server:configuration_lib",
-        "@envoy_api//envoy/extensions/stat_sinks/wasm_filter/v3:pkg_cc_proto",
+        "@envoy_api//contrib/envoy/extensions/stat_sinks/wasm_filter/v3:pkg_cc_proto",
     ],
-    alwayslink = 1,
 )
