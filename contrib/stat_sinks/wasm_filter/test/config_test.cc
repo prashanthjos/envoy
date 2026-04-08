@@ -1,12 +1,12 @@
-#include "contrib/envoy/extensions/stat_sinks/wasm_filter/v3/wasm_filter.pb.validate.h"
 #include "envoy/registry/registry.h"
 
 #include "source/common/protobuf/protobuf.h"
-#include "contrib/stat_sinks/wasm_filter/source/config.h"
 
 #include "test/mocks/server/mocks.h"
 #include "test/test_common/utility.h"
 
+#include "contrib/envoy/extensions/stat_sinks/wasm_filter/v3/wasm_filter.pb.validate.h"
+#include "contrib/stat_sinks/wasm_filter/source/config.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 

@@ -1,7 +1,6 @@
-#include "contrib/stat_sinks/wasm_filter/source/wasm_filter_stat_sink_impl.h"
-
 #include "test/mocks/stats/mocks.h"
 
+#include "contrib/stat_sinks/wasm_filter/source/wasm_filter_stat_sink_impl.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
