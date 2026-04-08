@@ -105,6 +105,7 @@ proto_library(
         "//contrib/envoy/extensions/regex_engines/hyperscan/v3alpha:pkg",
         "//contrib/envoy/extensions/router/cluster_specifier/golang/v3alpha:pkg",
         "//contrib/envoy/extensions/stat_sinks/kafka/v3:pkg",
+        "//contrib/envoy/extensions/stat_sinks/wasm_filter/v3:pkg",
         "//contrib/envoy/extensions/tap_sinks/udp_sink/v3alpha:pkg",
         "//contrib/envoy/extensions/upstreams/http/tcp/golang/v3alpha:pkg",
         "//contrib/envoy/extensions/vcl/v3alpha:pkg",

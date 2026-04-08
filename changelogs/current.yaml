@@ -898,6 +898,6 @@ new_features:
     histograms (``stats_filter_get_histograms``). This enables moving centralized
     metric processing logic (tag enrichment, name rewriting, custom metric injection)
     into the proxy itself. Configured via
-    :ref:`WasmFilterStatsSinkConfig <envoy_v3_api_msg_contrib_extensions.stat_sinks.wasm_filter.v3.WasmFilterStatsSinkConfig>`.
+    :ref:`WasmFilterStatsSinkConfig <envoy_v3_api_msg_extensions.stat_sinks.wasm_filter.v3.WasmFilterStatsSinkConfig>`.
 
 deprecated:

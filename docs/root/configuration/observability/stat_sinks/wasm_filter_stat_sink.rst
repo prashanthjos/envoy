@@ -19,6 +19,10 @@ centralized metric processing services with distributed in-proxy logic.
 
 .. attention::
 
+   The Wasm stats filter sink is only included in :ref:`contrib images <install_contrib>`
+
+.. attention::
+
    The Wasm stats filter sink is experimental and is currently under active development.
    Capabilities will be expanded over time and the configuration structures are likely to change.
 
