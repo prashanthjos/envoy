@@ -7,6 +7,10 @@
 #include "envoy/stats/histogram.h"
 #include "envoy/stats/stats.h"
 
+#include "source/common/stats/symbol_table.h"
+
+#include "absl/types/optional.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace StatSinks {
@@ -30,18 +34,27 @@ class EnrichedCounter : public Stats::Counter {
 public:
   EnrichedCounter(const Stats::Counter& original, const Stats::TagVector& extra_tags,
                   const std::string& name_override = "")
-      : original_(original), extra_tags_(extra_tags), name_override_(name_override) {}
+      : original_(original), extra_tags_(extra_tags), name_override_(name_override) {
+    if (!name_override_.empty()) {
+      override_stat_name_.emplace(name_override_,
+                                  const_cast<Stats::Counter&>(original_).symbolTable());
+    }
+  }
 
-  // Metric overrides
   std::string name() const override {
     return name_override_.empty() ? original_.name() : name_override_;
   }
-  Stats::StatName statName() const override { return original_.statName(); }
+  Stats::StatName statName() const override {
+    return override_stat_name_.has_value() ? override_stat_name_->statName() : original_.statName();
+  }
   Stats::TagVector tags() const override { return mergeTags(original_.tags(), extra_tags_); }
   std::string tagExtractedName() const override {
     return name_override_.empty() ? original_.tagExtractedName() : name_override_;
   }
-  Stats::StatName tagExtractedStatName() const override { return original_.tagExtractedStatName(); }
+  Stats::StatName tagExtractedStatName() const override {
+    return override_stat_name_.has_value() ? override_stat_name_->statName()
+                                           : original_.tagExtractedStatName();
+  }
   void iterateTagStatNames(const Stats::Metric::TagStatNameIterFn& fn) const override {
     original_.iterateTagStatNames(fn);
   }
@@ -55,12 +68,10 @@ public:
     return original_.constSymbolTable();
   }
 
-  // RefcountInterface -- these wrappers are stack-allocated, not ref-counted.
   void incRefCount() override {}
   bool decRefCount() override { return false; }
   uint32_t use_count() const override { return 1; }
 
-  // Counter-specific
   void add(uint64_t) override {}
   void inc() override {}
   uint64_t latch() override { return 0; }
@@ -71,6 +82,7 @@ private:
   const Stats::Counter& original_;
   const Stats::TagVector& extra_tags_;
   const std::string& name_override_;
+  absl::optional<Stats::StatNameManagedStorage> override_stat_name_;
 };
 
 // Wraps an existing Gauge with tag/name overrides.
@@ -78,17 +90,27 @@ class EnrichedGauge : public Stats::Gauge {
 public:
   EnrichedGauge(const Stats::Gauge& original, const Stats::TagVector& extra_tags,
                 const std::string& name_override = "")
-      : original_(original), extra_tags_(extra_tags), name_override_(name_override) {}
+      : original_(original), extra_tags_(extra_tags), name_override_(name_override) {
+    if (!name_override_.empty()) {
+      override_stat_name_.emplace(name_override_,
+                                  const_cast<Stats::Gauge&>(original_).symbolTable());
+    }
+  }
 
   std::string name() const override {
     return name_override_.empty() ? original_.name() : name_override_;
   }
-  Stats::StatName statName() const override { return original_.statName(); }
+  Stats::StatName statName() const override {
+    return override_stat_name_.has_value() ? override_stat_name_->statName() : original_.statName();
+  }
   Stats::TagVector tags() const override { return mergeTags(original_.tags(), extra_tags_); }
   std::string tagExtractedName() const override {
     return name_override_.empty() ? original_.tagExtractedName() : name_override_;
   }
-  Stats::StatName tagExtractedStatName() const override { return original_.tagExtractedStatName(); }
+  Stats::StatName tagExtractedStatName() const override {
+    return override_stat_name_.has_value() ? override_stat_name_->statName()
+                                           : original_.tagExtractedStatName();
+  }
   void iterateTagStatNames(const Stats::Metric::TagStatNameIterFn& fn) const override {
     original_.iterateTagStatNames(fn);
   }
@@ -120,6 +142,7 @@ private:
   const Stats::Gauge& original_;
   const Stats::TagVector& extra_tags_;
   const std::string& name_override_;
+  absl::optional<Stats::StatNameManagedStorage> override_stat_name_;
 };
 
 // Wraps an existing ParentHistogram with tag/name overrides.
@@ -127,17 +150,27 @@ class EnrichedHistogram : public Stats::ParentHistogram {
 public:
   EnrichedHistogram(const Stats::ParentHistogram& original, const Stats::TagVector& extra_tags,
                     const std::string& name_override = "")
-      : original_(original), extra_tags_(extra_tags), name_override_(name_override) {}
+      : original_(original), extra_tags_(extra_tags), name_override_(name_override) {
+    if (!name_override_.empty()) {
+      override_stat_name_.emplace(name_override_,
+                                  const_cast<Stats::ParentHistogram&>(original_).symbolTable());
+    }
+  }
 
   std::string name() const override {
     return name_override_.empty() ? original_.name() : name_override_;
   }
-  Stats::StatName statName() const override { return original_.statName(); }
+  Stats::StatName statName() const override {
+    return override_stat_name_.has_value() ? override_stat_name_->statName() : original_.statName();
+  }
   Stats::TagVector tags() const override { return mergeTags(original_.tags(), extra_tags_); }
   std::string tagExtractedName() const override {
     return name_override_.empty() ? original_.tagExtractedName() : name_override_;
   }
-  Stats::StatName tagExtractedStatName() const override { return original_.tagExtractedStatName(); }
+  Stats::StatName tagExtractedStatName() const override {
+    return override_stat_name_.has_value() ? override_stat_name_->statName()
+                                           : original_.tagExtractedStatName();
+  }
   void iterateTagStatNames(const Stats::Metric::TagStatNameIterFn& fn) const override {
     original_.iterateTagStatNames(fn);
   }
@@ -155,11 +188,9 @@ public:
   bool decRefCount() override { return false; }
   uint32_t use_count() const override { return 1; }
 
-  // Histogram
   Histogram::Unit unit() const override { return original_.unit(); }
   void recordValue(uint64_t) override {}
 
-  // ParentHistogram
   void merge() override {}
   const Stats::HistogramStatistics& intervalStatistics() const override {
     return original_.intervalStatistics();
@@ -183,6 +214,7 @@ private:
   const Stats::ParentHistogram& original_;
   const Stats::TagVector& extra_tags_;
   const std::string& name_override_;
+  absl::optional<Stats::StatNameManagedStorage> override_stat_name_;
 };
 
 // A standalone synthetic counter with stored name, value, and tags.

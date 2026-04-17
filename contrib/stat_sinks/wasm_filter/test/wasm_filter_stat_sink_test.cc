@@ -97,6 +97,8 @@ protected:
     ctx.kept_counter_indices = {0, 1, 2};
     ctx.kept_gauge_indices = {0, 1};
     ctx.kept_histogram_indices = {0, 1};
+    ctx.emit_called = true;
+    ctx.histogram_block_present = true;
     ctx.snapshot = &snapshot_;
     return ctx;
   }
@@ -130,6 +132,8 @@ TEST_F(EnrichedMetricSnapshotTest, DropAll) {
   ctx.kept_counter_indices = {};
   ctx.kept_gauge_indices = {};
   ctx.kept_histogram_indices = {999};
+  ctx.emit_called = true;
+  ctx.histogram_block_present = true;
   ctx.snapshot = &snapshot_;
   EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
 
@@ -536,6 +540,8 @@ TEST(StatsFilterContextAccessorTest, ClearResetsEverything) {
   ctx.kept_counter_indices.insert(1);
   ctx.kept_gauge_indices.insert(2);
   ctx.kept_histogram_indices.insert(3);
+  ctx.emit_called = true;
+  ctx.histogram_block_present = true;
   ctx.name_overrides.push_back({1, 0, "foo"});
   ctx.synthetic_counters.push_back({"bar", 1, {}});
   ctx.synthetic_gauges.push_back({"baz", 2, {}});
@@ -549,6 +555,8 @@ TEST(StatsFilterContextAccessorTest, ClearResetsEverything) {
   EXPECT_TRUE(ctx.kept_counter_indices.empty());
   EXPECT_TRUE(ctx.kept_gauge_indices.empty());
   EXPECT_TRUE(ctx.kept_histogram_indices.empty());
+  EXPECT_FALSE(ctx.emit_called);
+  EXPECT_FALSE(ctx.histogram_block_present);
   EXPECT_TRUE(ctx.name_overrides.empty());
   EXPECT_TRUE(ctx.synthetic_counters.empty());
   EXPECT_TRUE(ctx.synthetic_gauges.empty());
@@ -577,6 +585,8 @@ TEST(StatsFilterEmitTest, ParseCountersGaugesAndHistograms) {
   EXPECT_TRUE(ctx.kept_gauge_indices.contains(1));
   EXPECT_EQ(ctx.kept_histogram_indices.size(), 1);
   EXPECT_TRUE(ctx.kept_histogram_indices.contains(0));
+  EXPECT_TRUE(ctx.emit_called);
+  EXPECT_TRUE(ctx.histogram_block_present);
 
   setActiveContext(nullptr);
 }
@@ -591,6 +601,8 @@ TEST(StatsFilterEmitTest, HistogramBlockIsOptional) {
   EXPECT_EQ(callFF("stats_filter_emit", arguments), proxy_wasm::WasmResult::Ok);
   EXPECT_EQ(ctx.kept_counter_indices.size(), 1);
   EXPECT_TRUE(ctx.kept_histogram_indices.empty());
+  EXPECT_TRUE(ctx.emit_called);
+  EXPECT_FALSE(ctx.histogram_block_present);
 
   setActiveContext(nullptr);
 }
@@ -662,7 +674,7 @@ TEST(StatsFilterGlobalTagsTest, SetGlobalTagsWithActivePointer) {
   setGlobalTags(nullptr);
 }
 
-TEST(StatsFilterGlobalTagsTest, SetGlobalTagsStartupBuffering) {
+TEST(StatsFilterGlobalTagsTest, SetGlobalTagsNullPointerReturnsFailure) {
   setGlobalTags(nullptr);
 
   std::string wire;
@@ -670,7 +682,7 @@ TEST(StatsFilterGlobalTagsTest, SetGlobalTagsStartupBuffering) {
   appendStr(wire, "env");
   appendStr(wire, "staging");
 
-  EXPECT_EQ(callFF("stats_filter_set_global_tags", wire), proxy_wasm::WasmResult::Ok);
+  EXPECT_EQ(callFF("stats_filter_set_global_tags", wire), proxy_wasm::WasmResult::InternalFailure);
 }
 
 TEST(StatsFilterGlobalTagsTest, SetGlobalTagsBadArgument) {
@@ -991,6 +1003,7 @@ protected:
   void SetUp() override {
     EnrichedMetricSnapshotTest::SetUp();
     ctx_.snapshot = &snapshot_;
+    buildBufferToSnapshotMaps(snapshot_, ctx_);
     setActiveContext(&ctx_);
   }
   void TearDown() override { setActiveContext(nullptr); }
@@ -1217,6 +1230,7 @@ TEST_F(ProcessFilterDecisionsTest, FilterDecisions_KeepSubset) {
   ctx.gauge_buffer_to_snapshot = {0, 1};
   ctx.kept_counter_indices = {0};
   ctx.kept_gauge_indices = {1};
+  ctx.emit_called = true;
   Stats::TagVector global_tags;
 
   EXPECT_CALL(inner_sink_, flush(testing::_))
@@ -1239,6 +1253,7 @@ TEST_F(ProcessFilterDecisionsTest, FilterDecisions_UnusedMetricsPassThrough) {
   ctx.gauge_buffer_to_snapshot = {0};
   ctx.kept_counter_indices = {0};
   ctx.kept_gauge_indices = {0};
+  ctx.emit_called = true;
   Stats::TagVector global_tags;
 
   EXPECT_CALL(inner_sink_, flush(testing::_))
@@ -1258,6 +1273,7 @@ TEST_F(ProcessFilterDecisionsTest, IndexTranslation) {
   ctx.gauge_buffer_to_snapshot = {0, 1};
   ctx.kept_counter_indices = {1};
   ctx.kept_gauge_indices = {0, 1};
+  ctx.emit_called = true;
   Stats::TagVector global_tags;
 
   EXPECT_CALL(inner_sink_, flush(testing::_))
@@ -1285,6 +1301,7 @@ TEST_F(ProcessFilterDecisionsTest, NameOverrideTranslation) {
   ctx.gauge_buffer_to_snapshot = {0, 1};
   ctx.kept_counter_indices = {0, 1, 2};
   ctx.kept_gauge_indices = {0, 1};
+  ctx.emit_called = true;
   ctx.name_overrides.push_back({1, 0, "envoy.rq_2xx"});
   ctx.name_overrides.push_back({2, 0, "envoy.membership"});
   Stats::TagVector global_tags;
@@ -1324,6 +1341,8 @@ TEST_F(ProcessFilterDecisionsTest, HistogramFilterDecisions) {
   ctx.kept_counter_indices = {0, 1, 2};
   ctx.kept_gauge_indices = {0, 1};
   ctx.kept_histogram_indices = {0};
+  ctx.emit_called = true;
+  ctx.histogram_block_present = true;
   Stats::TagVector global_tags;
 
   EXPECT_CALL(inner_sink_, flush(testing::_))
@@ -1341,6 +1360,7 @@ TEST_F(ProcessFilterDecisionsTest, OutOfRangeBufferIndicesIgnored) {
   ctx.gauge_buffer_to_snapshot = {0};
   ctx.kept_counter_indices = {0, 99};
   ctx.kept_gauge_indices = {0, 99};
+  ctx.emit_called = true;
   Stats::TagVector global_tags;
 
   EXPECT_CALL(inner_sink_, flush(testing::_));
@@ -1353,6 +1373,7 @@ TEST_F(ProcessFilterDecisionsTest, NameOverrideOutOfRangeMapping) {
   ctx.gauge_buffer_to_snapshot = {0};
   ctx.kept_counter_indices = {0};
   ctx.kept_gauge_indices = {0};
+  ctx.emit_called = true;
   ctx.name_overrides.push_back({1, 99, "wont_apply"});
   ctx.name_overrides.push_back({2, 99, "wont_apply"});
   ctx.name_overrides.push_back({3, 0, "histogram_rename"});
@@ -1368,6 +1389,7 @@ TEST_F(ProcessFilterDecisionsTest, CombinedFilterEnrichSyntheticOverride) {
   ctx.gauge_buffer_to_snapshot = {0, 1};
   ctx.kept_counter_indices = {0, 2};
   ctx.kept_gauge_indices = {0};
+  ctx.emit_called = true;
   ctx.name_overrides.push_back({1, 0, "envoy.rq_2xx"});
   ctx.synthetic_counters.push_back({"wasm.count", 5, {{"source", "plugin"}}});
   Stats::TagVector global_tags = {{"env", "prod"}};
@@ -1387,18 +1409,77 @@ TEST_F(ProcessFilterDecisionsTest, CombinedFilterEnrichSyntheticOverride) {
   processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
 }
 
+TEST_F(ProcessFilterDecisionsTest, EmitCalledWithEmptySets_DropsAllUsedMetrics) {
+  StatsFilterContext ctx;
+  ctx.counter_buffer_to_snapshot = {0, 1, 2};
+  ctx.gauge_buffer_to_snapshot = {0, 1};
+  ctx.emit_called = true;
+  ctx.histogram_block_present = true;
+  Stats::TagVector global_tags;
+
+  EXPECT_CALL(inner_sink_, flush(testing::_))
+      .WillOnce(testing::Invoke([](Stats::MetricSnapshot& s) {
+        EXPECT_EQ(s.counters().size(), 0);
+        EXPECT_EQ(s.gauges().size(), 0);
+        EXPECT_EQ(s.histograms().size(), 0);
+      }));
+
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+}
+
+TEST_F(ProcessFilterDecisionsTest, EmitCalledWithEmptySets_UnusedMetricsStillPassThrough) {
+  counter_c_.used_ = false;
+  gauge_b_.used_ = false;
+
+  StatsFilterContext ctx;
+  ctx.counter_buffer_to_snapshot = {0, 1};
+  ctx.gauge_buffer_to_snapshot = {0};
+  ctx.emit_called = true;
+  Stats::TagVector global_tags;
+
+  EXPECT_CALL(inner_sink_, flush(testing::_))
+      .WillOnce(testing::Invoke([](Stats::MetricSnapshot& s) {
+        EXPECT_EQ(s.counters().size(), 1);
+        EXPECT_EQ(s.counters()[0].counter_.get().name(), "upstream_rq_total");
+        EXPECT_EQ(s.gauges().size(), 1);
+        EXPECT_EQ(s.gauges()[0].get().name(), "connections_active");
+      }));
+
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+}
+
+TEST_F(ProcessFilterDecisionsTest, EmitCalledNoHistogramBlock_HistogramsPassThrough) {
+  StatsFilterContext ctx;
+  ctx.counter_buffer_to_snapshot = {0, 1, 2};
+  ctx.gauge_buffer_to_snapshot = {0, 1};
+  ctx.kept_counter_indices = {0};
+  ctx.kept_gauge_indices = {0};
+  ctx.emit_called = true;
+  ctx.histogram_block_present = false;
+  Stats::TagVector global_tags;
+
+  EXPECT_CALL(inner_sink_, flush(testing::_))
+      .WillOnce(testing::Invoke([](Stats::MetricSnapshot& s) {
+        EXPECT_EQ(s.counters().size(), 1);
+        EXPECT_EQ(s.gauges().size(), 1);
+        EXPECT_EQ(s.histograms().size(), 2);
+      }));
+
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+}
+
 // ====================================================================
-// Foreign function: stats_filter_set_global_tags (startup buffering)
+// Foreign function: stats_filter_set_global_tags (null pointer)
 // ====================================================================
 
-TEST(StatsFilterGlobalTagsTest, StartupBufferingBadArgument) {
+TEST(StatsFilterGlobalTagsTest, NullPointerBadWire) {
   setGlobalTags(nullptr);
 
   std::string wire;
   appendU32(wire, 1);
   appendStr(wire, "key");
 
-  EXPECT_EQ(callFF("stats_filter_set_global_tags", wire), proxy_wasm::WasmResult::BadArgument);
+  EXPECT_EQ(callFF("stats_filter_set_global_tags", wire), proxy_wasm::WasmResult::InternalFailure);
 }
 
 } // namespace

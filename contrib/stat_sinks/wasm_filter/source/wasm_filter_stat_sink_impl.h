@@ -38,6 +38,15 @@ struct StatsFilterContext {
   absl::flat_hash_set<uint32_t> kept_gauge_indices;
   absl::flat_hash_set<uint32_t> kept_histogram_indices;
 
+  // True when stats_filter_emit was called by the plugin during this flush.
+  // Distinguishes "plugin didn't call emit" (passthrough) from "plugin
+  // explicitly emitted empty sets" (drop all).
+  bool emit_called{false};
+
+  // True when the stats_filter_emit call included a histogram index block.
+  // When false, histograms pass through unfiltered even if emit_called is true.
+  bool histogram_block_present{false};
+
   // Per-flush name overrides set by stats_filter_set_name_overrides.
   std::vector<NameOverride> name_overrides;
 
@@ -58,6 +67,8 @@ struct StatsFilterContext {
     kept_counter_indices.clear();
     kept_gauge_indices.clear();
     kept_histogram_indices.clear();
+    emit_called = false;
+    histogram_block_present = false;
     name_overrides.clear();
     synthetic_counters.clear();
     synthetic_gauges.clear();
@@ -140,7 +151,8 @@ private:
 // delegating to an inner sink.
 class WasmFilterStatsSink : public Stats::Sink {
 public:
-  WasmFilterStatsSink(Common::Wasm::PluginConfigPtr plugin_config, Stats::SinkPtr inner_sink);
+  WasmFilterStatsSink(Common::Wasm::PluginConfigPtr plugin_config, Stats::SinkPtr inner_sink,
+                      Stats::TagVector initial_global_tags = {});
 
   void flush(Stats::MetricSnapshot& snapshot) override;
 

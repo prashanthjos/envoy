@@ -23,15 +23,20 @@ WasmFilterSinkFactory::createStatsSink(const Protobuf::Message& proto_config,
       const envoy::extensions::stat_sinks::wasm_filter::v3::WasmFilterStatsSinkConfig&>(
       proto_config, context.messageValidationContext().staticValidationVisitor());
 
-  // Create the WASM plugin (reuses the same pattern as the existing WASM stat sink).
+  // Scope a TagVector for the plugin's onConfigure to write global tags into.
+  // This avoids shared thread-local state when multiple wasm_filter sinks exist.
+  Stats::TagVector startup_tags;
+  setGlobalTags(&startup_tags);
+
   auto plugin_config = std::make_unique<Common::Wasm::PluginConfig>(
       config.wasm_config(), context, context.scope(), context.initManager(),
       envoy::config::core::v3::TrafficDirection::UNSPECIFIED, nullptr, true);
 
+  setGlobalTags(nullptr);
+
   context.api().customStatNamespaces().registerStatNamespace(
       Extensions::Common::Wasm::CustomStatNamespace);
 
-  // Create the inner sink from its embedded StatsSink config.
   const auto& inner_sink_config = config.inner_sink();
   auto& inner_factory =
       Config::Utility::getAndCheckFactory<Server::Configuration::StatsSinkFactory>(
@@ -43,8 +48,8 @@ WasmFilterSinkFactory::createStatsSink(const Protobuf::Message& proto_config,
   auto inner_sink = inner_factory.createStatsSink(*inner_message, context);
   RETURN_IF_NOT_OK_REF(inner_sink.status());
 
-  return std::make_unique<WasmFilterStatsSink>(std::move(plugin_config),
-                                               std::move(inner_sink.value()));
+  return std::make_unique<WasmFilterStatsSink>(
+      std::move(plugin_config), std::move(inner_sink.value()), std::move(startup_tags));
 }
 
 ProtobufTypes::MessagePtr WasmFilterSinkFactory::createEmptyConfigProto() {

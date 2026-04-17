@@ -17,11 +17,6 @@ namespace {
 thread_local StatsFilterContext* active_context = nullptr;
 thread_local Stats::TagVector* active_global_tags = nullptr;
 
-// Buffers tags set during OnPluginStart (before any sink exists).
-// The sink constructor moves these into its own global_tags_ member.
-thread_local Stats::TagVector startup_global_tags;
-thread_local bool startup_global_tags_pending = false;
-
 constexpr size_t kU32 = sizeof(uint32_t);
 constexpr size_t kU64 = sizeof(uint64_t);
 
@@ -137,8 +132,10 @@ RegisterForeignFunction registerStatsFilterEmit(
         if (!readIndexBlock(data, total, offset, ctx->kept_histogram_indices)) {
           return WasmResult::BadArgument;
         }
+        ctx->histogram_block_present = true;
       }
 
+      ctx->emit_called = true;
       return WasmResult::Ok;
     });
 
@@ -161,21 +158,13 @@ RegisterForeignFunction registerStatsFilterSetGlobalTags(
       const size_t total = arguments.size();
       size_t offset = 0;
 
-      // During flush, active_global_tags points to the sink's member.
-      // During OnPluginStart (before the sink exists), we buffer into
-      // startup_global_tags which the sink constructor will pick up.
       Stats::TagVector* tags = active_global_tags;
-      if (tags != nullptr) {
-        tags->clear();
-        if (!readTagVector(data, total, offset, *tags)) {
-          return WasmResult::BadArgument;
-        }
-      } else {
-        startup_global_tags.clear();
-        if (!readTagVector(data, total, offset, startup_global_tags)) {
-          return WasmResult::BadArgument;
-        }
-        startup_global_tags_pending = true;
+      if (tags == nullptr) {
+        return WasmResult::InternalFailure;
+      }
+      tags->clear();
+      if (!readTagVector(data, total, offset, *tags)) {
+        return WasmResult::BadArgument;
       }
 
       return WasmResult::Ok;
@@ -362,7 +351,7 @@ RegisterForeignFunction registerStatsFilterGetMetricTags(
 // ---------------------------------------------------------------------------
 // Foreign function: stats_filter_get_all_metric_tags
 //
-// Bulk: returns tags for ALL counters, gauges, and histograms.
+// Bulk: returns tags for used counters and gauges (in buffer order) and all histograms.
 // Output: 3 blocks (counters, gauges, histograms), each:
 //   [metric_count: u32]
 //   For each metric: [tag_count: u32] for each tag: [name_len][name][value_len][value]
@@ -380,19 +369,26 @@ RegisterForeignFunction registerStatsFilterGetAllMetricTags(
       const auto& gauges = ctx->snapshot->gauges();
       const auto& histograms = ctx->snapshot->histograms();
 
-      auto collectTags = [](const auto& metrics, auto extractTags) {
+      auto collectBufferedTags = [](const auto& metrics, const auto& buffer_to_snapshot,
+                                    auto extractTags) {
         std::vector<Stats::TagVector> all;
-        all.reserve(metrics.size());
-        for (const auto& m : metrics) {
-          all.push_back(extractTags(m));
+        all.reserve(buffer_to_snapshot.size());
+        for (uint32_t snapshot_index : buffer_to_snapshot) {
+          all.push_back(extractTags(metrics[snapshot_index]));
         }
         return all;
       };
 
       auto counter_tags =
-          collectTags(counters, [](const auto& c) { return c.counter_.get().tags(); });
-      auto gauge_tags = collectTags(gauges, [](const auto& g) { return g.get().tags(); });
-      auto histogram_tags = collectTags(histograms, [](const auto& h) { return h.get().tags(); });
+          collectBufferedTags(counters, ctx->counter_buffer_to_snapshot,
+                              [](const auto& c) { return c.counter_.get().tags(); });
+      auto gauge_tags = collectBufferedTags(gauges, ctx->gauge_buffer_to_snapshot,
+                                            [](const auto& g) { return g.get().tags(); });
+      std::vector<Stats::TagVector> histogram_tags;
+      histogram_tags.reserve(histograms.size());
+      for (const auto& h : histograms) {
+        histogram_tags.push_back(h.get().tags());
+      }
 
       auto blockSize = [](const std::vector<Stats::TagVector>& tag_groups) -> size_t {
         size_t sz = kU32;
@@ -514,18 +510,16 @@ void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilter
   const auto& counters = snapshot.counters();
   const auto& gauges = snapshot.gauges();
 
-  bool has_filter_decisions = !context.kept_counter_indices.empty() ||
-                              !context.kept_gauge_indices.empty() ||
-                              !context.kept_histogram_indices.empty();
   bool has_enrichments = !global_tags.empty() || !context.name_overrides.empty() ||
                          !context.synthetic_counters.empty() || !context.synthetic_gauges.empty();
 
-  if (!has_filter_decisions && !has_enrichments) {
+  if (!context.emit_called && !has_enrichments) {
     inner_sink.flush(snapshot);
     return;
   }
 
-  if (!has_filter_decisions && has_enrichments) {
+  if (!context.emit_called && has_enrichments) {
+    // Plugin didn't filter, but has enrichments - keep all metrics.
     for (uint32_t i = 0; i < counters.size(); ++i) {
       context.kept_counter_indices.insert(i);
     }
@@ -534,7 +528,8 @@ void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilter
     }
   }
 
-  if (has_filter_decisions) {
+  if (context.emit_called) {
+    // Unused metrics always pass through regardless of filtering.
     for (uint32_t i = 0; i < counters.size(); ++i) {
       if (!counters[i].counter_.get().used()) {
         context.kept_counter_indices.insert(i);
@@ -599,8 +594,8 @@ EnrichedMetricSnapshot::EnrichedMetricSnapshot(Stats::MetricSnapshot& original,
   }
 
   // Build enriched histograms.
-  if (ctx.kept_histogram_indices.empty()) {
-    // No histogram filtering -- pass all through with enrichment.
+  if (!ctx.histogram_block_present) {
+    // No histogram block in emit call -- pass all through with enrichment.
     histogram_wrappers_.reserve(src_histograms.size());
     enriched_histograms_.reserve(src_histograms.size());
     for (uint32_t i = 0; i < src_histograms.size(); ++i) {
@@ -668,14 +663,10 @@ EnrichedMetricSnapshot::EnrichedMetricSnapshot(Stats::MetricSnapshot& original,
 // ---------------------------------------------------------------------------
 
 WasmFilterStatsSink::WasmFilterStatsSink(Common::Wasm::PluginConfigPtr plugin_config,
-                                         Stats::SinkPtr inner_sink)
-    : plugin_config_(std::move(plugin_config)), inner_sink_(std::move(inner_sink)) {
-  if (startup_global_tags_pending) {
-    global_tags_ = std::move(startup_global_tags);
-    startup_global_tags.clear();
-    startup_global_tags_pending = false;
-  }
-}
+                                         Stats::SinkPtr inner_sink,
+                                         Stats::TagVector initial_global_tags)
+    : plugin_config_(std::move(plugin_config)), inner_sink_(std::move(inner_sink)),
+      global_tags_(std::move(initial_global_tags)) {}
 
 void WasmFilterStatsSink::flush(Stats::MetricSnapshot& snapshot) {
   context_.clear();
