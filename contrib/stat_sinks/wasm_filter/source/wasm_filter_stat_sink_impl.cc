@@ -57,6 +57,9 @@ bool readIndexBlock(const char* data, size_t total, size_t& offset,
   if (!readU32(data, total, offset, count)) {
     return false;
   }
+  if (count > (total - offset) / kU32) {
+    return false;
+  }
   dest.reserve(count);
   for (uint32_t i = 0; i < count; ++i) {
     uint32_t idx = 0;
@@ -71,6 +74,9 @@ bool readIndexBlock(const char* data, size_t total, size_t& offset,
 bool readTagVector(const char* data, size_t total, size_t& offset, Stats::TagVector& tags) {
   uint32_t tag_count = 0;
   if (!readU32(data, total, offset, tag_count)) {
+    return false;
+  }
+  if (tag_count > (total - offset) / (2 * kU32)) {
     return false;
   }
   tags.reserve(tag_count);
@@ -199,6 +205,9 @@ RegisterForeignFunction registerStatsFilterSetNameOverrides(
       if (!readU32(data, total, offset, count)) {
         return WasmResult::BadArgument;
       }
+      if (count > (total - offset) / (3 * kU32)) {
+        return WasmResult::BadArgument;
+      }
 
       ctx->name_overrides.reserve(count);
       for (uint32_t i = 0; i < count; ++i) {
@@ -246,6 +255,9 @@ RegisterForeignFunction registerStatsFilterInjectMetrics(
       auto readMetricBlock = [&](std::vector<SyntheticMetricDef>& dest) -> bool {
         uint32_t count = 0;
         if (!readU32(data, total, offset, count)) {
+          return false;
+        }
+        if (count > (total - offset) / (2 * kU32 + kU64)) {
           return false;
         }
         dest.reserve(count);
@@ -483,7 +495,8 @@ void buildBufferToSnapshotMaps(Stats::MetricSnapshot& snapshot, StatsFilterConte
 }
 
 void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilterContext& context,
-                                    Stats::TagVector& global_tags, Stats::Sink& inner_sink) {
+                                    Stats::TagVector& global_tags, Stats::SymbolTable& symbol_table,
+                                    Stats::Sink& inner_sink) {
   auto translateIndices = [](absl::flat_hash_set<uint32_t>& indices,
                              const std::vector<uint32_t>& mapping) {
     absl::flat_hash_set<uint32_t> translated;
@@ -542,7 +555,7 @@ void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilter
     }
   }
 
-  EnrichedMetricSnapshot enriched(snapshot, context, global_tags);
+  EnrichedMetricSnapshot enriched(snapshot, context, global_tags, symbol_table);
   inner_sink.flush(enriched);
 }
 
@@ -552,8 +565,9 @@ void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilter
 
 EnrichedMetricSnapshot::EnrichedMetricSnapshot(Stats::MetricSnapshot& original,
                                                const StatsFilterContext& ctx,
-                                               const Stats::TagVector& global_tags)
-    : original_(original) {
+                                               const Stats::TagVector& global_tags,
+                                               Stats::SymbolTable& symbol_table)
+    : original_(original), symbol_table_(symbol_table) {
   const auto& src_counters = original.counters();
   const auto& src_gauges = original.gauges();
   const auto& src_histograms = original.histograms();
@@ -618,42 +632,27 @@ EnrichedMetricSnapshot::EnrichedMetricSnapshot(Stats::MetricSnapshot& original,
 
   // Append synthetic counters.
   if (!ctx.synthetic_counters.empty()) {
-    // We need a SymbolTable reference. Borrow from the first real counter if available.
-    Stats::SymbolTable* sym = nullptr;
-    if (!src_counters.empty()) {
-      sym = &const_cast<Stats::Counter&>(src_counters[0].counter_.get()).symbolTable();
-    } else if (!src_gauges.empty()) {
-      sym = &const_cast<Stats::Gauge&>(src_gauges[0].get()).symbolTable();
+    synthetic_counter_objs_.reserve(ctx.synthetic_counters.size());
+    for (const auto& def : ctx.synthetic_counters) {
+      auto merged_tags = mergeTags(def.tags, global_tags);
+      synthetic_counter_objs_.emplace_back(symbol_table_, def.name, def.value,
+                                           std::move(merged_tags));
     }
-    if (sym != nullptr) {
-      synthetic_counter_objs_.reserve(ctx.synthetic_counters.size());
-      for (const auto& def : ctx.synthetic_counters) {
-        auto merged_tags = mergeTags(def.tags, global_tags);
-        synthetic_counter_objs_.emplace_back(*sym, def.name, def.value, std::move(merged_tags));
-      }
-      for (auto& sc : synthetic_counter_objs_) {
-        enriched_counters_.push_back({sc.value(), sc});
-      }
+    for (auto& sc : synthetic_counter_objs_) {
+      enriched_counters_.push_back({sc.value(), sc});
     }
   }
 
   // Append synthetic gauges.
   if (!ctx.synthetic_gauges.empty()) {
-    Stats::SymbolTable* sym = nullptr;
-    if (!src_counters.empty()) {
-      sym = &const_cast<Stats::Counter&>(src_counters[0].counter_.get()).symbolTable();
-    } else if (!src_gauges.empty()) {
-      sym = &const_cast<Stats::Gauge&>(src_gauges[0].get()).symbolTable();
+    synthetic_gauge_objs_.reserve(ctx.synthetic_gauges.size());
+    for (const auto& def : ctx.synthetic_gauges) {
+      auto merged_tags = mergeTags(def.tags, global_tags);
+      synthetic_gauge_objs_.emplace_back(symbol_table_, def.name, def.value,
+                                         std::move(merged_tags));
     }
-    if (sym != nullptr) {
-      synthetic_gauge_objs_.reserve(ctx.synthetic_gauges.size());
-      for (const auto& def : ctx.synthetic_gauges) {
-        auto merged_tags = mergeTags(def.tags, global_tags);
-        synthetic_gauge_objs_.emplace_back(*sym, def.name, def.value, std::move(merged_tags));
-      }
-      for (auto& sg : synthetic_gauge_objs_) {
-        enriched_gauges_.emplace_back(sg);
-      }
+    for (auto& sg : synthetic_gauge_objs_) {
+      enriched_gauges_.emplace_back(sg);
     }
   }
 }
@@ -664,9 +663,10 @@ EnrichedMetricSnapshot::EnrichedMetricSnapshot(Stats::MetricSnapshot& original,
 
 WasmFilterStatsSink::WasmFilterStatsSink(Common::Wasm::PluginConfigPtr plugin_config,
                                          Stats::SinkPtr inner_sink,
+                                         Stats::SymbolTable& symbol_table,
                                          Stats::TagVector initial_global_tags)
     : plugin_config_(std::move(plugin_config)), inner_sink_(std::move(inner_sink)),
-      global_tags_(std::move(initial_global_tags)) {}
+      symbol_table_(symbol_table), global_tags_(std::move(initial_global_tags)) {}
 
 void WasmFilterStatsSink::flush(Stats::MetricSnapshot& snapshot) {
   context_.clear();
@@ -688,7 +688,7 @@ void WasmFilterStatsSink::flush(Stats::MetricSnapshot& snapshot) {
   setActiveContext(nullptr);
   setGlobalTags(nullptr);
 
-  processFilterDecisionsAndFlush(snapshot, context_, global_tags_, *inner_sink_);
+  processFilterDecisionsAndFlush(snapshot, context_, global_tags_, symbol_table_, *inner_sink_);
 }
 
 } // namespace WasmFilter

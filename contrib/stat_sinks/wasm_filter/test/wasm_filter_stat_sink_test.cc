@@ -112,6 +112,7 @@ protected:
   NiceMock<Stats::MockParentHistogram> histogram_b_;
   NiceMock<Stats::MockMetricSnapshot> snapshot_;
   Stats::TagVector empty_tags_;
+  Stats::SymbolTable& symbol_table_{counter_a_.symbolTable()};
 };
 
 // ====================================================================
@@ -120,7 +121,7 @@ protected:
 
 TEST_F(EnrichedMetricSnapshotTest, KeepAll) {
   auto ctx = makeCtxKeepAll();
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   EXPECT_EQ(enriched.counters().size(), 3);
   EXPECT_EQ(enriched.gauges().size(), 2);
@@ -135,7 +136,7 @@ TEST_F(EnrichedMetricSnapshotTest, DropAll) {
   ctx.emit_called = true;
   ctx.histogram_block_present = true;
   ctx.snapshot = &snapshot_;
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   EXPECT_EQ(enriched.counters().size(), 0);
   EXPECT_EQ(enriched.gauges().size(), 0);
@@ -147,7 +148,7 @@ TEST_F(EnrichedMetricSnapshotTest, KeepSubsetOfCounters) {
   ctx.kept_counter_indices = {0, 2};
   ctx.kept_gauge_indices = {0, 1};
   ctx.snapshot = &snapshot_;
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   ASSERT_EQ(enriched.counters().size(), 2);
   EXPECT_EQ(enriched.counters()[0].counter_.get().name(), "upstream_rq_2xx");
@@ -160,7 +161,7 @@ TEST_F(EnrichedMetricSnapshotTest, EmptyHistogramIndicesPassAllThrough) {
   ctx.kept_counter_indices = {0};
   ctx.kept_gauge_indices = {0};
   ctx.snapshot = &snapshot_;
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   EXPECT_EQ(enriched.histograms().size(), 2);
 }
@@ -172,7 +173,7 @@ TEST_F(EnrichedMetricSnapshotTest, EmptyHistogramIndicesPassAllThrough) {
 TEST_F(EnrichedMetricSnapshotTest, GlobalTagsAppliedToAllMetrics) {
   Stats::TagVector global_tags = {{"datacenter", "us-east-1"}, {"pod", "pod42"}};
   auto ctx = makeCtxKeepAll();
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, global_tags);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, global_tags, symbol_table_);
 
   auto counter_tags = enriched.counters()[0].counter_.get().tags();
   EXPECT_GE(counter_tags.size(), 2);
@@ -197,7 +198,7 @@ TEST_F(EnrichedMetricSnapshotTest, GlobalTagsAppliedToAllMetrics) {
 TEST_F(EnrichedMetricSnapshotTest, NameOverrideOnCounter) {
   auto ctx = makeCtxKeepAll();
   ctx.name_overrides.push_back({1, 0, "envoy.upstream_rq_2xx"});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   EXPECT_EQ(enriched.counters()[0].counter_.get().name(), "envoy.upstream_rq_2xx");
   EXPECT_EQ(enriched.counters()[1].counter_.get().name(), "upstream_rq_5xx");
@@ -206,7 +207,7 @@ TEST_F(EnrichedMetricSnapshotTest, NameOverrideOnCounter) {
 TEST_F(EnrichedMetricSnapshotTest, NameOverrideOnGauge) {
   auto ctx = makeCtxKeepAll();
   ctx.name_overrides.push_back({2, 1, "envoy.connections_active"});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   EXPECT_EQ(enriched.gauges()[1].get().name(), "envoy.connections_active");
 }
@@ -214,7 +215,7 @@ TEST_F(EnrichedMetricSnapshotTest, NameOverrideOnGauge) {
 TEST_F(EnrichedMetricSnapshotTest, NameOverrideOnHistogram) {
   auto ctx = makeCtxKeepAll();
   ctx.name_overrides.push_back({3, 0, "envoy.upstream_rq_time"});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   EXPECT_EQ(enriched.histograms()[0].get().name(), "envoy.upstream_rq_time");
 }
@@ -224,7 +225,7 @@ TEST_F(EnrichedMetricSnapshotTest, NameOverrideOutOfRange) {
   ctx.name_overrides.push_back({1, 999, "out_of_range"});
   ctx.name_overrides.push_back({2, 999, "out_of_range"});
   ctx.name_overrides.push_back({3, 999, "out_of_range"});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   EXPECT_EQ(enriched.counters()[0].counter_.get().name(), "upstream_rq_2xx");
   EXPECT_EQ(enriched.gauges()[0].get().name(), "membership_total");
@@ -238,7 +239,7 @@ TEST_F(EnrichedMetricSnapshotTest, NameOverrideOutOfRange) {
 TEST_F(EnrichedMetricSnapshotTest, SyntheticCounterInjected) {
   auto ctx = makeCtxKeepAll();
   ctx.synthetic_counters.push_back({"wasm_filter.metrics_emitted", 42, {}});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   ASSERT_EQ(enriched.counters().size(), 4);
   EXPECT_EQ(enriched.counters()[3].counter_.get().name(), "wasm_filter.metrics_emitted");
@@ -249,7 +250,7 @@ TEST_F(EnrichedMetricSnapshotTest, SyntheticCounterInjected) {
 TEST_F(EnrichedMetricSnapshotTest, SyntheticGaugeInjected) {
   auto ctx = makeCtxKeepAll();
   ctx.synthetic_gauges.push_back({"app.version", 1, {{"version", "v1.2.3"}}});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   ASSERT_EQ(enriched.gauges().size(), 3);
   EXPECT_EQ(enriched.gauges()[2].get().name(), "app.version");
@@ -264,7 +265,7 @@ TEST_F(EnrichedMetricSnapshotTest, SyntheticMetricsGetGlobalTags) {
   Stats::TagVector global_tags = {{"dc", "us-east-1"}};
   auto ctx = makeCtxKeepAll();
   ctx.synthetic_counters.push_back({"custom.count", 10, {}});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, global_tags);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, global_tags, symbol_table_);
 
   auto last = enriched.counters().back();
   auto tags = last.counter_.get().tags();
@@ -278,7 +279,7 @@ TEST_F(EnrichedMetricSnapshotTest, SyntheticMetricsGetGlobalTags) {
 
 TEST_F(EnrichedMetricSnapshotTest, ForwardsTextReadoutsHostCountersHostGauges) {
   auto ctx = makeCtxKeepAll();
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   EXPECT_EQ(&enriched.textReadouts(), &snapshot_.text_readouts_);
   EXPECT_EQ(&enriched.hostCounters(), &snapshot_.host_counters_);
@@ -287,7 +288,7 @@ TEST_F(EnrichedMetricSnapshotTest, ForwardsTextReadoutsHostCountersHostGauges) {
 
 TEST_F(EnrichedMetricSnapshotTest, ForwardsSnapshotTime) {
   auto ctx = makeCtxKeepAll();
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
   enriched.snapshotTime();
 }
 
@@ -304,7 +305,7 @@ TEST_F(EnrichedMetricSnapshotTest, FilterRenameTagInjectCombined) {
   ctx.name_overrides.push_back({1, 0, "envoy.upstream_rq_2xx"});
   ctx.synthetic_gauges.push_back({"wasm_filter.queue_depth", 7, {}});
 
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, global_tags);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, global_tags, symbol_table_);
 
   ASSERT_EQ(enriched.counters().size(), 1);
   EXPECT_EQ(enriched.counters()[0].counter_.get().name(), "envoy.upstream_rq_2xx");
@@ -325,7 +326,7 @@ TEST_F(EnrichedMetricSnapshotTest, FilterRenameTagInjectCombined) {
 TEST_F(EnrichedMetricSnapshotTest, EnrichedCounterMethods) {
   auto ctx = makeCtxKeepAll();
   ctx.name_overrides.push_back({1, 0, "envoy.upstream_rq_2xx"});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   const auto& cref = enriched.counters()[0].counter_.get();
   EXPECT_EQ(cref.name(), "envoy.upstream_rq_2xx");
@@ -347,7 +348,7 @@ TEST_F(EnrichedMetricSnapshotTest, EnrichedCounterMethods) {
 
 TEST_F(EnrichedMetricSnapshotTest, EnrichedCounterOriginalName) {
   auto ctx = makeCtxKeepAll();
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   const auto& cref = enriched.counters()[0].counter_.get();
   EXPECT_EQ(cref.name(), "upstream_rq_2xx");
@@ -357,7 +358,7 @@ TEST_F(EnrichedMetricSnapshotTest, EnrichedCounterOriginalName) {
 TEST_F(EnrichedMetricSnapshotTest, EnrichedGaugeMethods) {
   auto ctx = makeCtxKeepAll();
   ctx.name_overrides.push_back({2, 0, "envoy.membership"});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   const auto& gref = enriched.gauges()[0].get();
   EXPECT_EQ(gref.name(), "envoy.membership");
@@ -384,7 +385,7 @@ TEST_F(EnrichedMetricSnapshotTest, EnrichedGaugeMethods) {
 
 TEST_F(EnrichedMetricSnapshotTest, EnrichedGaugeOriginalName) {
   auto ctx = makeCtxKeepAll();
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   const auto& gref = enriched.gauges()[0].get();
   EXPECT_EQ(gref.name(), "membership_total");
@@ -394,7 +395,7 @@ TEST_F(EnrichedMetricSnapshotTest, EnrichedGaugeOriginalName) {
 TEST_F(EnrichedMetricSnapshotTest, EnrichedHistogramMethods) {
   auto ctx = makeCtxKeepAll();
   ctx.name_overrides.push_back({3, 0, "envoy.upstream_rq_time"});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   const auto& href = enriched.histograms()[0].get();
   EXPECT_EQ(href.name(), "envoy.upstream_rq_time");
@@ -422,7 +423,7 @@ TEST_F(EnrichedMetricSnapshotTest, EnrichedHistogramMethods) {
 
 TEST_F(EnrichedMetricSnapshotTest, EnrichedHistogramOriginalName) {
   auto ctx = makeCtxKeepAll();
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   const auto& href = enriched.histograms()[0].get();
   EXPECT_EQ(href.name(), "upstream_rq_time");
@@ -432,7 +433,7 @@ TEST_F(EnrichedMetricSnapshotTest, EnrichedHistogramOriginalName) {
 TEST_F(EnrichedMetricSnapshotTest, SyntheticCounterMethods) {
   auto ctx = makeCtxKeepAll();
   ctx.synthetic_counters.push_back({"syn.count", 77, {{"k", "v"}}});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   const auto& sc = enriched.counters().back().counter_.get();
   EXPECT_EQ(sc.name(), "syn.count");
@@ -459,7 +460,7 @@ TEST_F(EnrichedMetricSnapshotTest, SyntheticCounterMethods) {
 TEST_F(EnrichedMetricSnapshotTest, SyntheticGaugeMethods) {
   auto ctx = makeCtxKeepAll();
   ctx.synthetic_gauges.push_back({"syn.gauge", 33, {{"x", "y"}}});
-  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_);
+  EnrichedMetricSnapshot enriched(snapshot_, ctx, empty_tags_, symbol_table_);
 
   const auto& sg = enriched.gauges().back().get();
   EXPECT_EQ(sg.name(), "syn.gauge");
@@ -1204,7 +1205,7 @@ TEST_F(ProcessFilterDecisionsTest, NoDecisionsNoEnrichments_Passthrough) {
   Stats::TagVector global_tags;
 
   EXPECT_CALL(inner_sink_, flush(testing::Ref(snapshot_)));
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, GlobalTagsOnly_KeepAllAndEnrich) {
@@ -1221,7 +1222,7 @@ TEST_F(ProcessFilterDecisionsTest, GlobalTagsOnly_KeepAllAndEnrich) {
         EXPECT_EQ(tags.back().name_, "dc");
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, FilterDecisions_KeepSubset) {
@@ -1241,7 +1242,7 @@ TEST_F(ProcessFilterDecisionsTest, FilterDecisions_KeepSubset) {
         EXPECT_EQ(s.gauges()[0].get().name(), "connections_active");
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, FilterDecisions_UnusedMetricsPassThrough) {
@@ -1262,7 +1263,7 @@ TEST_F(ProcessFilterDecisionsTest, FilterDecisions_UnusedMetricsPassThrough) {
         EXPECT_EQ(s.gauges().size(), 2);
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, IndexTranslation) {
@@ -1292,7 +1293,7 @@ TEST_F(ProcessFilterDecisionsTest, IndexTranslation) {
         EXPECT_TRUE(found_5xx);
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, NameOverrideTranslation) {
@@ -1312,7 +1313,7 @@ TEST_F(ProcessFilterDecisionsTest, NameOverrideTranslation) {
         EXPECT_EQ(s.gauges()[0].get().name(), "envoy.membership");
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, SyntheticMetrics_NoFilterDecisions) {
@@ -1331,7 +1332,7 @@ TEST_F(ProcessFilterDecisionsTest, SyntheticMetrics_NoFilterDecisions) {
         EXPECT_EQ(s.gauges().back().get().name(), "custom.gauge");
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, HistogramFilterDecisions) {
@@ -1351,7 +1352,7 @@ TEST_F(ProcessFilterDecisionsTest, HistogramFilterDecisions) {
         EXPECT_EQ(s.histograms()[0].get().name(), "upstream_rq_time");
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, OutOfRangeBufferIndicesIgnored) {
@@ -1364,7 +1365,7 @@ TEST_F(ProcessFilterDecisionsTest, OutOfRangeBufferIndicesIgnored) {
   Stats::TagVector global_tags;
 
   EXPECT_CALL(inner_sink_, flush(testing::_));
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, NameOverrideOutOfRangeMapping) {
@@ -1380,7 +1381,7 @@ TEST_F(ProcessFilterDecisionsTest, NameOverrideOutOfRangeMapping) {
   Stats::TagVector global_tags;
 
   EXPECT_CALL(inner_sink_, flush(testing::_));
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, CombinedFilterEnrichSyntheticOverride) {
@@ -1406,7 +1407,7 @@ TEST_F(ProcessFilterDecisionsTest, CombinedFilterEnrichSyntheticOverride) {
         EXPECT_GE(syn_tags.size(), 2);
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, EmitCalledWithEmptySets_DropsAllUsedMetrics) {
@@ -1424,7 +1425,7 @@ TEST_F(ProcessFilterDecisionsTest, EmitCalledWithEmptySets_DropsAllUsedMetrics) 
         EXPECT_EQ(s.histograms().size(), 0);
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, EmitCalledWithEmptySets_UnusedMetricsStillPassThrough) {
@@ -1445,7 +1446,7 @@ TEST_F(ProcessFilterDecisionsTest, EmitCalledWithEmptySets_UnusedMetricsStillPas
         EXPECT_EQ(s.gauges()[0].get().name(), "connections_active");
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 TEST_F(ProcessFilterDecisionsTest, EmitCalledNoHistogramBlock_HistogramsPassThrough) {
@@ -1465,7 +1466,7 @@ TEST_F(ProcessFilterDecisionsTest, EmitCalledNoHistogramBlock_HistogramsPassThro
         EXPECT_EQ(s.histograms().size(), 2);
       }));
 
-  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, inner_sink_);
+  processFilterDecisionsAndFlush(snapshot_, ctx, global_tags, symbol_table_, inner_sink_);
 }
 
 // ====================================================================

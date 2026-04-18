@@ -96,7 +96,8 @@ void buildBufferToSnapshotMaps(Stats::MetricSnapshot& snapshot, StatsFilterConte
 // Translates WASM filter decisions from buffer-order indices to snapshot-order
 // indices, applies enrichment, and flushes to the inner sink.
 void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilterContext& context,
-                                    Stats::TagVector& global_tags, Stats::Sink& inner_sink);
+                                    Stats::TagVector& global_tags, Stats::SymbolTable& symbol_table,
+                                    Stats::Sink& inner_sink);
 
 // Wraps an existing MetricSnapshot, applying:
 //   - Filtering by kept indices
@@ -106,7 +107,8 @@ void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilter
 class EnrichedMetricSnapshot : public Stats::MetricSnapshot {
 public:
   EnrichedMetricSnapshot(Stats::MetricSnapshot& original, const StatsFilterContext& ctx,
-                         const Stats::TagVector& global_tags);
+                         const Stats::TagVector& global_tags,
+                         Stats::SymbolTable& symbol_table);
 
   const std::vector<CounterSnapshot>& counters() override { return enriched_counters_; }
   const std::vector<std::reference_wrapper<const Stats::Gauge>>& gauges() override {
@@ -128,6 +130,7 @@ public:
 
 private:
   Stats::MetricSnapshot& original_;
+  Stats::SymbolTable& symbol_table_;
 
   // Wrapper objects must outlive the snapshot. Stored here.
   std::vector<EnrichedCounter> counter_wrappers_;
@@ -152,6 +155,7 @@ private:
 class WasmFilterStatsSink : public Stats::Sink {
 public:
   WasmFilterStatsSink(Common::Wasm::PluginConfigPtr plugin_config, Stats::SinkPtr inner_sink,
+                      Stats::SymbolTable& symbol_table,
                       Stats::TagVector initial_global_tags = {});
 
   void flush(Stats::MetricSnapshot& snapshot) override;
@@ -165,6 +169,7 @@ public:
 private:
   Common::Wasm::PluginConfigPtr plugin_config_;
   Stats::SinkPtr inner_sink_;
+  Stats::SymbolTable& symbol_table_;
   StatsFilterContext context_;
   Stats::TagVector global_tags_;
 };
