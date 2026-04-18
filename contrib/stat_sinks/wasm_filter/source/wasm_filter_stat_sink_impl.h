@@ -107,8 +107,7 @@ void processFilterDecisionsAndFlush(Stats::MetricSnapshot& snapshot, StatsFilter
 class EnrichedMetricSnapshot : public Stats::MetricSnapshot {
 public:
   EnrichedMetricSnapshot(Stats::MetricSnapshot& original, const StatsFilterContext& ctx,
-                         const Stats::TagVector& global_tags,
-                         Stats::SymbolTable& symbol_table);
+                         const Stats::TagVector& global_tags, Stats::SymbolTable& symbol_table);
 
   const std::vector<CounterSnapshot>& counters() override { return enriched_counters_; }
   const std::vector<std::reference_wrapper<const Stats::Gauge>>& gauges() override {
@@ -155,8 +154,7 @@ private:
 class WasmFilterStatsSink : public Stats::Sink {
 public:
   WasmFilterStatsSink(Common::Wasm::PluginConfigPtr plugin_config, Stats::SinkPtr inner_sink,
-                      Stats::SymbolTable& symbol_table,
-                      Stats::TagVector initial_global_tags = {});
+                      Stats::SymbolTable& symbol_table, Stats::TagVector initial_global_tags = {});
 
   void flush(Stats::MetricSnapshot& snapshot) override;
 

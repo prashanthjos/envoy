@@ -48,10 +48,9 @@ WasmFilterSinkFactory::createStatsSink(const Protobuf::Message& proto_config,
   auto inner_sink = inner_factory.createStatsSink(*inner_message, context);
   RETURN_IF_NOT_OK_REF(inner_sink.status());
 
-  return std::make_unique<WasmFilterStatsSink>(std::move(plugin_config),
-                                               std::move(inner_sink.value()),
-                                               context.scope().symbolTable(),
-                                               std::move(startup_tags));
+  return std::make_unique<WasmFilterStatsSink>(
+      std::move(plugin_config), std::move(inner_sink.value()), context.scope().symbolTable(),
+      std::move(startup_tags));
 }
 
 ProtobufTypes::MessagePtr WasmFilterSinkFactory::createEmptyConfigProto() {
