@@ -195,10 +195,9 @@ absl::Status SdsApi::validateUpdateSize(uint32_t added_resources_num,
   // It is, however, preferred to ignore these nonsensical responses rather
   // than NACK them, so it is allowed here.
   if (added_resources_num > 1 || removed_resources_num > 1) {
-    const auto msg =
-        fmt::format("Unexpected SDS secrets length for {}, number of added resources "
-                    "{}, number of removed resources {}. Expected sum is 1",
-                    sds_config_name_, added_resources_num, removed_resources_num);
+    const auto msg = fmt::format("Unexpected SDS secrets length for {}, number of added resources "
+                                 "{}, number of removed resources {}. Expected sum is 1",
+                                 sds_config_name_, added_resources_num, removed_resources_num);
     ENVOY_LOG_MISC(warn, "sds: secret '{}' config rejected: {}", sds_config_name_, msg);
     return absl::InvalidArgumentError(msg);
   }

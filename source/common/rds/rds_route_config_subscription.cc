@@ -93,10 +93,9 @@ absl::Status RdsRouteConfigSubscription::onConfigUpdate(
   Protobuf::ReflectableMessage reflectable_config = createReflectableMessage(route_config);
   if (reflectable_config->GetDescriptor()->full_name() !=
       route_config_provider_manager_.protoTraits().resourceType()) {
-    const auto msg =
-        fmt::format("Unexpected {} configuration type (expecting {}): {}", rds_type_,
-                    route_config_provider_manager_.protoTraits().resourceType(),
-                    reflectable_config->GetDescriptor()->full_name());
+    const auto msg = fmt::format("Unexpected {} configuration type (expecting {}): {}", rds_type_,
+                                 route_config_provider_manager_.protoTraits().resourceType(),
+                                 reflectable_config->GetDescriptor()->full_name());
     ENVOY_LOG(warn, "rds: route config '{}' rejected: {}", route_config_name_, msg);
     return absl::InvalidArgumentError(msg);
   }
