@@ -2387,3 +2387,172 @@ func envoy_dynamic_module_on_http_filter_config_scheduled(
 		ch.scheduler.onScheduled(uint64(taskID))
 	}
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Stats Sink
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// statSinkWrapper holds the per-config Go state that must stay alive for as
+// long as Envoy keeps the in-module config pointer. The wrapper is kept alive
+// by an entry in statSinkHandles (defined below with the //export hooks).
+type statSinkWrapper struct {
+	sink   shared.StatSink
+	handle *dymStatSinkHandle
+}
+
+// dymStatSinkHandle implements shared.StatSinkHandle. Today it only carries
+// logging; kept as a struct so we can add fields (worker index, shared data)
+// without changing the interface contract.
+type dymStatSinkHandle struct{}
+
+func (*dymStatSinkHandle) Log(level shared.LogLevel, format string, args ...any) {
+	hostLog(level, format, args)
+}
+
+// dymMetricSnapshot implements shared.MetricSnapshot by delegating to the
+// Envoy callbacks. It is a short-lived value constructed once per OnFlush call
+// and discarded when OnFlush returns; the underlying envoy pointer is only
+// valid during that window.
+type dymMetricSnapshot struct {
+	snapshotPtr C.envoy_dynamic_module_type_stat_sink_snapshot_envoy_ptr
+}
+
+func (s *dymMetricSnapshot) CounterCount() uint64 {
+	return uint64(C.envoy_dynamic_module_callback_stat_sink_snapshot_get_counter_count(s.snapshotPtr))
+}
+
+func (s *dymMetricSnapshot) GetCounter(index uint64) (shared.CounterSnapshot, bool) {
+	var nameBuf C.envoy_dynamic_module_type_envoy_buffer
+	var value, delta C.uint64_t
+	ok := bool(C.envoy_dynamic_module_callback_stat_sink_snapshot_get_counter(
+		s.snapshotPtr, C.size_t(index), &nameBuf, &value, &delta,
+	))
+	if !ok {
+		return shared.CounterSnapshot{}, false
+	}
+	return shared.CounterSnapshot{
+		Name:  envoyBufferToUnsafeEnvoyBuffer(nameBuf),
+		Value: uint64(value),
+		Delta: uint64(delta),
+	}, true
+}
+
+func (s *dymMetricSnapshot) GaugeCount() uint64 {
+	return uint64(C.envoy_dynamic_module_callback_stat_sink_snapshot_get_gauge_count(s.snapshotPtr))
+}
+
+func (s *dymMetricSnapshot) GetGauge(index uint64) (shared.GaugeSnapshot, bool) {
+	var nameBuf C.envoy_dynamic_module_type_envoy_buffer
+	var value C.uint64_t
+	ok := bool(C.envoy_dynamic_module_callback_stat_sink_snapshot_get_gauge(
+		s.snapshotPtr, C.size_t(index), &nameBuf, &value,
+	))
+	if !ok {
+		return shared.GaugeSnapshot{}, false
+	}
+	return shared.GaugeSnapshot{
+		Name:  envoyBufferToUnsafeEnvoyBuffer(nameBuf),
+		Value: uint64(value),
+	}, true
+}
+
+func (s *dymMetricSnapshot) TextReadoutCount() uint64 {
+	return uint64(C.envoy_dynamic_module_callback_stat_sink_snapshot_get_text_readout_count(s.snapshotPtr))
+}
+
+func (s *dymMetricSnapshot) GetTextReadout(index uint64) (shared.TextReadoutSnapshot, bool) {
+	var nameBuf, valueBuf C.envoy_dynamic_module_type_envoy_buffer
+	ok := bool(C.envoy_dynamic_module_callback_stat_sink_snapshot_get_text_readout(
+		s.snapshotPtr, C.size_t(index), &nameBuf, &valueBuf,
+	))
+	if !ok {
+		return shared.TextReadoutSnapshot{}, false
+	}
+	return shared.TextReadoutSnapshot{
+		Name:  envoyBufferToUnsafeEnvoyBuffer(nameBuf),
+		Value: envoyBufferToUnsafeEnvoyBuffer(valueBuf),
+	}, true
+}
+
+// statSinkHandles maps the C-allocated handle we return to Envoy back to the
+// Go-owned wrapper. We cannot hand Envoy a pointer into Go-managed memory
+// because cgo's pointer-passing rules forbid it (the GC may move or collect
+// the allocation). Instead we C.malloc a tiny slot, hand Envoy that pointer,
+// and use it as a key into this map. The map itself keeps the wrapper alive.
+var (
+	statSinkHandlesMu sync.Mutex
+	statSinkHandles   = map[uintptr]*statSinkWrapper{}
+)
+
+func statSinkHandleGet(p unsafe.Pointer) *statSinkWrapper {
+	statSinkHandlesMu.Lock()
+	defer statSinkHandlesMu.Unlock()
+	return statSinkHandles[uintptr(p)]
+}
+
+//export envoy_dynamic_module_on_stat_sink_config_new
+func envoy_dynamic_module_on_stat_sink_config_new(
+	_ C.envoy_dynamic_module_type_stat_sink_config_envoy_ptr,
+	name C.envoy_dynamic_module_type_envoy_buffer,
+	config C.envoy_dynamic_module_type_envoy_buffer,
+) C.envoy_dynamic_module_type_stat_sink_config_module_ptr {
+	nameString := envoyBufferToStringUnsafe(name)
+	configBytes := envoyBufferToBytesUnsafe(config)
+
+	handle := &dymStatSinkHandle{}
+	sink, err := sdk.NewStatSink(handle, nameString, configBytes)
+	if err != nil || sink == nil {
+		handle.Log(shared.LogLevelWarn, "Failed to load stats sink configuration: %v", err)
+		return nil
+	}
+
+	// Allocate a small C-owned slot; its address is the opaque handle we return
+	// to Envoy. Freed in on_stat_sink_config_destroy.
+	cHandle := C.malloc(1)
+	statSinkHandlesMu.Lock()
+	statSinkHandles[uintptr(cHandle)] = &statSinkWrapper{sink: sink, handle: handle}
+	statSinkHandlesMu.Unlock()
+	return C.envoy_dynamic_module_type_stat_sink_config_module_ptr(cHandle)
+}
+
+//export envoy_dynamic_module_on_stat_sink_config_destroy
+func envoy_dynamic_module_on_stat_sink_config_destroy(
+	configPtr C.envoy_dynamic_module_type_stat_sink_config_module_ptr,
+) {
+	statSinkHandlesMu.Lock()
+	wrapper := statSinkHandles[uintptr(configPtr)]
+	delete(statSinkHandles, uintptr(configPtr))
+	statSinkHandlesMu.Unlock()
+
+	if wrapper != nil {
+		wrapper.sink.OnDestroy()
+	}
+	C.free(unsafe.Pointer(uintptr(configPtr)))
+}
+
+//export envoy_dynamic_module_on_stat_sink_flush
+func envoy_dynamic_module_on_stat_sink_flush(
+	configPtr C.envoy_dynamic_module_type_stat_sink_config_module_ptr,
+	_ C.envoy_dynamic_module_type_stat_sink_envoy_ptr,
+	snapshotPtr C.envoy_dynamic_module_type_stat_sink_snapshot_envoy_ptr,
+) {
+	wrapper := statSinkHandleGet(unsafe.Pointer(uintptr(configPtr)))
+	if wrapper == nil {
+		return
+	}
+	snapshot := &dymMetricSnapshot{snapshotPtr: snapshotPtr}
+	wrapper.sink.OnFlush(snapshot)
+}
+
+//export envoy_dynamic_module_on_stat_sink_on_histogram_complete
+func envoy_dynamic_module_on_stat_sink_on_histogram_complete(
+	configPtr C.envoy_dynamic_module_type_stat_sink_config_module_ptr,
+	histogramName C.envoy_dynamic_module_type_envoy_buffer,
+	value C.uint64_t,
+) {
+	wrapper := statSinkHandleGet(unsafe.Pointer(uintptr(configPtr)))
+	if wrapper == nil {
+		return
+	}
+	wrapper.sink.OnHistogramComplete(envoyBufferToUnsafeEnvoyBuffer(histogramName), uint64(value))
+}

@@ -46,6 +46,7 @@ proto_library(
         "//contrib/envoy/extensions/reverse_tunnel_reporters/v3alpha/clients/grpc_client:pkg",
         "//contrib/envoy/extensions/reverse_tunnel_reporters/v3alpha/reporters:pkg",
         "//contrib/envoy/extensions/router/cluster_specifier/golang/v3alpha:pkg",
+        "//contrib/envoy/extensions/stat_sinks/dynamic_modules/v3:pkg",
         "//contrib/envoy/extensions/stat_sinks/kafka/v3:pkg",
         "//contrib/envoy/extensions/stat_sinks/wasm_filter/v3:pkg",
         "//contrib/envoy/extensions/tap_sinks/udp_sink/v3alpha:pkg",

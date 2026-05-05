@@ -3,6 +3,7 @@ load("//test/extensions/dynamic_modules/test_data/c:test_data.bzl", "test_progra
 licenses(["notice"])  # Apache 2
 
 package(default_visibility = [
+    "//contrib/stat_sinks/dynamic_modules/test:__pkg__",
     "//test/extensions/access_loggers/dynamic_modules:__pkg__",
     "//test/extensions/clusters/dynamic_modules:__pkg__",
     "//test/extensions/dynamic_modules:__pkg__",
@@ -211,3 +212,17 @@ test_program(name = "tracer_no_op")
 test_program(name = "tracer_config_fail")
 
 test_program(name = "tracer_with_values")
+
+test_program(name = "stat_sink_no_op")
+
+test_program(name = "stat_sink_config_new_fail")
+
+test_program(name = "stat_sink_missing_config_new")
+
+test_program(name = "stat_sink_missing_config_destroy")
+
+test_program(name = "stat_sink_missing_flush")
+
+test_program(name = "stat_sink_missing_histogram_complete")
+
+test_program(name = "stat_sink_integration_test")
