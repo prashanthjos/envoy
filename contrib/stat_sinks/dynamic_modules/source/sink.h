@@ -1,9 +1,8 @@
 #pragma once
 
-#include <string>
-#include <vector>
-
 #include "envoy/stats/sink.h"
+
+#include "source/extensions/dynamic_modules/stat_sink_flush_context.h"
 
 #include "contrib/stat_sinks/dynamic_modules/source/sink_config.h"
 
@@ -12,18 +11,9 @@ namespace Extensions {
 namespace StatSinks {
 namespace DynamicModules {
 
-/**
- * Context passed as the snapshot_envoy_ptr during flush. Holds the snapshot pointer and
- * string caches. Every stat's name() and TextReadout::value() return std::string by value,
- * so we materialize them once per flush to hand modules stable pointers.
- */
-struct StatSinkFlushContext {
-  Stats::MetricSnapshot* snapshot;
-  std::vector<std::string> counter_names;
-  std::vector<std::string> gauge_names;
-  std::vector<std::string> text_readout_names;
-  std::vector<std::string> text_readout_values;
-};
+// Re-exported for convenience; the struct itself lives in core so the ABI
+// callbacks that consume it are provided by every Envoy binary.
+using ::Envoy::Extensions::DynamicModules::StatSinkFlushContext;
 
 /**
  * Stats sink that delegates to a dynamic module. A single config is shared across all

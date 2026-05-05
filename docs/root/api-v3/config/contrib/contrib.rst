@@ -10,6 +10,7 @@ Contrib extensions
   sip/sip
   cluster_specifier/cluster_specifier
   cryptomb/cryptomb
+  dynamic_modules_stats_sink/dynamic_modules_stats_sink
   hyperscan/matcher
   hyperscan/regex_engine
   dlb/dlb

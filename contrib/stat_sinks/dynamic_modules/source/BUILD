@@ -24,13 +24,8 @@ envoy_cc_library(
 
 envoy_cc_library(
     name = "sink_lib",
-    srcs = [
-        "abi_impl.cc",
-        "sink.cc",
-    ],
-    hdrs = [
-        "sink.h",
-    ],
+    srcs = ["sink.cc"],
+    hdrs = ["sink.h"],
     deps = [
         ":sink_config_lib",
         "//envoy/stats:sink_interface",
